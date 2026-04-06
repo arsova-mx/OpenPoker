@@ -1,0 +1,10 @@
+/**
+ * Placeholder module for shared TypeScript types and interfaces.
+ *
+ * Types to be defined during development:
+ *  - Session       – planning poker session
+ *  - Story         – user story within a session
+ *  - Participant   – a user in a session
+ *  - Vote          – a single vote cast by a participant
+ *  - CardDeck      – the set of estimation cards (Fibonacci, T-shirt, etc.)
+ */
