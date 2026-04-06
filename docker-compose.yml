@@ -7,15 +7,15 @@ services:
     container_name: openpoker-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: openpoker
-      POSTGRES_USER: openpoker
-      POSTGRES_PASSWORD: openpoker_secret
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openpoker"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,11 +31,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/openpoker
-      SPRING_DATASOURCE_USERNAME: openpoker
-      SPRING_DATASOURCE_PASSWORD: openpoker_secret
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT}:8080"
 
   # ── Frontend (React + Vite) ────────────────────────────────────
   frontend:
@@ -46,8 +46,10 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      BACKEND_URL: http://backend:8080
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT}:80"
 
 volumes:
   postgres_data:
