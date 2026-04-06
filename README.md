@@ -6,7 +6,7 @@ Open Source Planning Poker application for agile teams.
 
 | Layer     | Technology                                |
 |-----------|-------------------------------------------|
-| Backend   | Java 21, Spring Boot 4, Maven             |
+| Backend   | Java 21, Spring Boot 4.0, Maven           |
 | Frontend  | React 18, Vite, TypeScript                |
 | Database  | PostgreSQL (via Docker)                   |
 | Infra     | Docker, Docker Compose                    |
