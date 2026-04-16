@@ -25,9 +25,4 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
     }
-
-    @GetMapping("/api/hello")
-    public String hello() {
-        return "Hello public!";
-    }
 }
