@@ -1,4 +1,4 @@
-package GlobalExceptionHandler;
+package com.openpoker.globalexception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
