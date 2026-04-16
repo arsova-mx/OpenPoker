@@ -56,6 +56,14 @@ set ERROR_CODE=0
 @REM To isolate internal variables from possible post scripts, we use another setlocal
 @setlocal
 
+@REM Normalize JAVA_HOME when it incorrectly points to the JDK bin directory.
+if not "%JAVA_HOME%" == "" (
+  if exist "%JAVA_HOME%\java.exe" (
+    set "JAVA_HOME=%JAVA_HOME%\.."
+    for %%I in ("%JAVA_HOME%") do set "JAVA_HOME=%%~fI"
+  )
+)
+
 @REM ==== START VALIDATION ====
 if not "%JAVA_HOME%" == "" goto OkJHome
 
