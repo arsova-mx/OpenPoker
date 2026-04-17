@@ -4,14 +4,13 @@ import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
 import com.openpoker.entity.User;
-import com.openpoker.globalexception.UserAlreadyExistException;
+import com.openpoker.globalexception.InvalidCredentialsException;
+import com.openpoker.globalexception.UserAlreadyExistsException;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -22,10 +21,10 @@ public class AuthService {
 
     public AuthResponse register(RegisterRequest request) {
         if(userRepository.findByUsername(request.username()).isPresent()) {
-            throw new UserAlreadyExistException("Username");
+            throw new UserAlreadyExistsException("Username");
         }
         if(userRepository.findByEmail(request.email()).isPresent()) {
-            throw new UserAlreadyExistException("Email");
+            throw new UserAlreadyExistsException("Email");
         }
 
         User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder
@@ -39,11 +38,11 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.username()).orElseThrow(() -> new RuntimeException(
-                "Credenciales invalidas"));
+        User user = userRepository.findByUsername(request.username()).orElseThrow(() -> new
+                InvalidCredentialsException());
 
         if(!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new RuntimeException("Credenciales invalidas");
+            throw new InvalidCredentialsException();
         }
 
         String token = jwtService.generateToken(user.getUsername());

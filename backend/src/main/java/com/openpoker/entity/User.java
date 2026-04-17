@@ -4,10 +4,11 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "usuarios")
+@Table(name = "users")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -32,13 +33,12 @@ public class User {
 
     @PrePersist
     public void prePersist() {
-        Timestamp now = new Timestamp(System.currentTimeMillis());
-        createdAt = now;
-        updatedAt = now;
+        createdAt = Timestamp.from(Instant.now());
+        updatedAt = Timestamp.from(Instant.now());
     }
 
     @PreUpdate
     public void preUpdate() {
-        updatedAt = new Timestamp(System.currentTimeMillis());
+        updatedAt = Timestamp.from(Instant.now());
     }
 }
