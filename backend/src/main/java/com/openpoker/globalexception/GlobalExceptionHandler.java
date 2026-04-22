@@ -16,4 +16,29 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleInvalidCredentials(InvalidCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
     }
+
+    @ExceptionHandler(SessionNotFoundException.class)
+    public ResponseEntity<?> handleSessionNotFound(SessionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(UserAlreadyInSessionException.class)
+    public ResponseEntity<?> handleUserAlreadyInSession(UserAlreadyInSessionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(InsufficientRoleException.class)
+    public ResponseEntity<?> handleInsufficientRole(InsufficientRoleException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleGenericException(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Ha ocurrido un error interno en el servidor.");
+    }
+
+    @ExceptionHandler(HOSTNOTFOUNDEXCEPTION.class)
+    public ResponseEntity<?> handlarHostNotFoundException(HOSTNOTFOUNDEXCEPTION ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+    }
 }

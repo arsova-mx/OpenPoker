@@ -4,6 +4,7 @@ import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
 import com.openpoker.entity.User;
+import com.openpoker.entity.UserRole;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
 import org.junit.jupiter.api.Test;
@@ -49,7 +50,7 @@ class AuthServiceTest {
 
     @Test
     void loginUser() {
-        User user = User.builder().username("user").passwordHash("encoded-password").build();
+        User user = User.builder().username("user").role(UserRole.HOST).passwordHash("encoded-password").build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("1234", "encoded-password")).thenReturn(true);

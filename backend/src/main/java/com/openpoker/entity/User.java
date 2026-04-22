@@ -16,7 +16,6 @@ import java.util.UUID;
 @Builder
 public class User {
     @Id
-    @GeneratedValue
     private UUID id;
 
     @Column(unique = true, nullable = false)
@@ -24,6 +23,10 @@ public class User {
 
     @Column(unique = true, nullable = false)
     private String email;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role;
 
     @Column(nullable = false)
     private String passwordHash;
@@ -33,6 +36,9 @@ public class User {
 
     @PrePersist
     public void prePersist() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         createdAt = Timestamp.from(Instant.now());
         updatedAt = Timestamp.from(Instant.now());
     }
