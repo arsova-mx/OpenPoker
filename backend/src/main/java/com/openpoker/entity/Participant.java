@@ -6,7 +6,6 @@ import java.util.UUID;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -26,7 +25,6 @@ import lombok.Setter;
 @Builder
 public class Participant {
     @Id
-    @GeneratedValue
     private UUID id;
 
     @ManyToOne(optional = false)
@@ -42,6 +40,9 @@ public class Participant {
 
     @PrePersist
     public void prePersist() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         joinedAt = new Timestamp(System.currentTimeMillis());
     }
 

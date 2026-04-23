@@ -1,4 +1,4 @@
-package com.openpoker.SessionCodeGenerator;
+package com.openpoker.sessioncodegenerator;
 
 import java.util.Random;
 

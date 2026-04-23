@@ -32,13 +32,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ex.getMessage());
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleGenericException(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Ha ocurrido un error interno en el servidor.");
-    }
-
-    @ExceptionHandler(HOSTNOTFOUNDEXCEPTION.class)
-    public ResponseEntity<?> handlarHostNotFoundException(HOSTNOTFOUNDEXCEPTION ex) {
+    @ExceptionHandler(HostNotFoundException.class)
+    public ResponseEntity<?> handleHostNotFoundException(HostNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 }
