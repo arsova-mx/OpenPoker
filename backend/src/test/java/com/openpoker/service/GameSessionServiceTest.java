@@ -63,17 +63,21 @@ class GameSessionServiceTest {
 
     @Test
     void getSession_valid() {
+        UUID hostId = UUID.randomUUID();
         GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
-                .hostUserId(UUID.randomUUID()).status(SessionStatus.WAITING).createdAt(new Timestamp(System.
+                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(System.
                         currentTimeMillis())).build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
 
         when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findById(hostId)).thenReturn(Optional.of(host));
         when(participantRepository.countByGameSession(session)).thenReturn(1L);
 
         SessionResponse res = gameSessionService.getSessionByCode("ABC123");
 
         assertEquals("ABC123", res.sessionCode());
         assertEquals("Sprint 1", res.name());
+        assertEquals("host", res.hostUsername());
         assertEquals("WAITING", res.status());
     }
 
@@ -101,5 +105,27 @@ class GameSessionServiceTest {
                 () -> gameSessionService.joinSession("host", "ABC123"));
 
         assertEquals("Solo los usuarios VOTER pueden unirse a sesiones", ex.getMessage());
+    }
+
+    @Test
+    void joinSession_successForVoter() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
+                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(System.
+                        currentTimeMillis())).build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
+        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.empty());
+        when(userRepository.findById(hostId)).thenReturn(Optional.of(host));
+        when(participantRepository.countByGameSession(session)).thenReturn(2L);
+
+        SessionResponse res = gameSessionService.joinSession("voter", "ABC123");
+
+        assertEquals("ABC123", res.sessionCode());
+        assertEquals("host", res.hostUsername());
+        assertEquals(2L, res.participantCount());
     }
 }
