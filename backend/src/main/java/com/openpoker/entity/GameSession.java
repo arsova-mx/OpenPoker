@@ -60,4 +60,7 @@ public class GameSession {
     public void preUpdate() {
         updatedAt = new Timestamp(System.currentTimeMillis());
     }
+
+    @Column(nullable = false)
+    private boolean votesRevealed = false;
 }
