@@ -36,4 +36,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleHostNotFoundException(HostNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
+
+    @ExceptionHandler(SessionNotInVotingException.class)
+    public ResponseEntity<?> handleSessionNotInVotingException(SessionNotInVotingException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(UsernameIsNotParticipantSessionException.class)
+    public ResponseEntity<?> handleUsernameIsNotParticipantSessionException(UsernameIsNotParticipantSessionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidValue.class)
+    public ResponseEntity<?> handleInvalidValue(InvalidValue ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+    }
 }
