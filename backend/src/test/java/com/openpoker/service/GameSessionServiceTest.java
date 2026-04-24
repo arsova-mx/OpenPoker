@@ -4,10 +4,12 @@ import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.entity.GameSession;
+import com.openpoker.entity.Participant;
 import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 import com.openpoker.globalexception.SessionNotFoundException;
+import com.openpoker.globalexception.UserAlreadyInSessionException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
@@ -110,5 +112,49 @@ class GameSessionServiceTest {
                 getSessionByCode("INVALID"));
 
         assertEquals("Session no encontrada", ex.getMessage());
+    }
+
+    @Test
+    void joinSession_success() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
+                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
+                        System.currentTimeMillis())).build();
+        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
+        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.empty());
+        when(userRepository.findById(hostId)).thenReturn(Optional.of(host));
+        when(participantRepository.countByGameSession(session)).thenReturn(2L);
+
+        SessionResponse response = gameSessionService.joinSession("voter", "ABC123");
+
+        assertEquals("ABC123", response.sessionCode());
+        assertEquals("host", response.hostUsername());
+        assertEquals(2L, response.participantCount());
+        verify(participantRepository, times(1)).save(any(Participant.class));
+    }
+
+    @Test
+    void joinSession_userAlreadyInSession() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
+                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
+                        System.currentTimeMillis())).build();
+        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
+        Participant existingParticipant = Participant.builder().id(UUID.randomUUID()).gameSession(session).user(voter)
+                .role(Participant.Role.VOTER).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
+        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.of(
+                existingParticipant));
+
+        UserAlreadyInSessionException exception = assertThrows(UserAlreadyInSessionException.class,
+                () -> gameSessionService.joinSession("voter", "ABC123"));
+
+        assertEquals("El usuario ya esta en la session", exception.getMessage());
     }
 }
