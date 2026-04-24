@@ -51,4 +51,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleInvalidValue(InvalidValue ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
+
+    @ExceptionHandler(OnlyHostCanRevealVotesException.class)
+    public ResponseEntity<?> handleOnlyHostCanRevealVotesException(OnlyHostCanRevealVotesException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
 }

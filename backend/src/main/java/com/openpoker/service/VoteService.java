@@ -3,13 +3,9 @@ package com.openpoker.service;
 import com.openpoker.domain.FibonacciDeck;
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
-import com.openpoker.entity.GameSession;
-import com.openpoker.entity.SessionStatus;
-import com.openpoker.entity.User;
-import com.openpoker.globalexception.InvalidValue;
-import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.SessionNotInVotingException;
-import com.openpoker.globalexception.UsernameIsNotParticipantSessionException;
+import com.openpoker.dto.VotingResultsResponse;
+import com.openpoker.entity.*;
+import com.openpoker.globalexception.*;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
@@ -17,6 +13,8 @@ import com.openpoker.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +42,46 @@ public class VoteService {
             throw new InvalidValue("Valor invalido");
         }
 
-        Vote vote = voteRepository.findByGameSessionAndUser(session, user).
+        Vote vote = voteRepository.findByGameSessionAndUser(session, user).orElse(Vote.builder().gameSession(session)
+                .user(user).build());
+
+        vote.setCardValue(request.cardValue());
+
+        voteRepository.save(vote);
+
+        return new VoteResponse(user.getUsername(), vote.getCardValue(), vote.getUpdatedAt());
+    }
+
+    public VotingResultsResponse getVotes(String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
+                SessionNotFoundException("Session no encontrada"));
+
+        List<Vote> votes = voteRepository.findAllByGameSession(session);
+
+        List<VoteResponse> response = votes.stream().map(v -> new VoteResponse(v.getUser().getUsername(), session
+                .isVotesRevealed() ? v.getCardValue() : "*", v.getUpdatedAt())).toList();
+
+        return new VotingResultsResponse(code, response, session.isVotesRevealed());
+    }
+
+    public VotingResultsResponse revealVotes(String username, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
+                SessionNotFoundException("Session no encontrada"));
+
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
+                "Usuario no encontrado"));
+
+        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> new
+                UsernameIsNotParticipantSessionException("No eres participante"));
+
+        if(participant.getRole() != Participant.Role.HOST) {
+            throw new OnlyHostCanRevealVotesException("Solo el host puede revelar");
+        }
+
+        session.setVotesRevealed(true);
+
+        sessionRepository.save(session);
+
+        return getVotes(code);
     }
 }
