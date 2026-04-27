@@ -16,4 +16,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleInvalidCredentials(InvalidCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ex.getMessage());
     }
+
+    @ExceptionHandler(SessionNotFoundException.class)
+    public ResponseEntity<?> handleSessionNotFound(SessionNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(UserAlreadyInSessionException.class)
+    public ResponseEntity<?> handleUserAlreadyInSession(UserAlreadyInSessionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(InsufficientRoleException.class)
+    public ResponseEntity<?> handleInsufficientRole(InsufficientRoleException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(HostNotFoundException.class)
+    public ResponseEntity<?> handleHostNotFoundException(HostNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
+    }
 }
