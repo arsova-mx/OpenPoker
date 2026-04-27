@@ -1,4 +1,5 @@
 /* Global styles – minimal reset for the hello-world stage */
+@import "tailwindcss";
 *,
 *::before,
 *::after {

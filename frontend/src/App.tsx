@@ -1,5 +1,8 @@
-import HelloWorld from '@/components/HelloWorld/HelloWorld';
-import './App.css';
+
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import Login from './routes/Login';
+import Register from './routes/Register';
+import Main from './routes/Main';
 
 /**
  * Root application component.
@@ -8,10 +11,34 @@ import './App.css';
  * once development begins.
  */
 function App() {
+
+  const router = createBrowserRouter(
+    [
+      {
+        path:'/',
+        children: [
+          { 
+            index: true,
+            element: <Main/>
+          },
+          {
+            path:'/login',
+            element: <Login/>
+          },
+          {
+            path:'/register',
+            element: <Register/>
+          }
+        ]
+      }
+    ]
+  );
+
   return (
-    <main>
-      <HelloWorld />
-    </main>
+    <>
+      <RouterProvider router={router} />
+    </>
+    
   );
 }
 

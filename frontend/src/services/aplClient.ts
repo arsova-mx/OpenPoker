@@ -7,3 +7,21 @@
  *  - voteService     – REST calls for vote submission & reveal
  *  - apiClient       – base Axios/Fetch wrapper (base URL, interceptors)
  */
+
+
+import axios from "axios";
+const API_URL = import.meta.url as string;
+
+export const instance = axios.create({
+    baseURL: API_URL,
+    headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+instance.interceptors.request.use(
+    function (config) {
+        config.headers.Authorization = "Bearer"
+        return config
+    }
+)
