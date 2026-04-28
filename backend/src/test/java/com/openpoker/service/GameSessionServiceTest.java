@@ -4,9 +4,11 @@ import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.entity.GameSession;
+import com.openpoker.entity.Participant;
 import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
+import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
@@ -53,8 +55,7 @@ class GameSessionServiceTest {
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(codeGenerator.generate()).thenReturn("ABC123");
-        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation
-                .getArgument(0));
+        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
         SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
@@ -62,6 +63,7 @@ class GameSessionServiceTest {
         assertNotNull(res);
         assertEquals("ABC123", res.sessionCode());
         assertEquals("Sprint 1", res.name());
+        assertEquals("VOTING", res.status());
     }
 
     @Test
@@ -70,15 +72,15 @@ class GameSessionServiceTest {
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(codeGenerator.generate()).thenReturn("ABC123", "XYZ789");
-        when(sessionRepository.saveAndFlush(any(GameSession.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenThrow(new DataIntegrityViolationException("duplicate key")).thenAnswer(invocation -> invocation
+                .getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
         SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
 
         assertNotNull(res);
         assertEquals("XYZ789", res.sessionCode());
+        assertEquals("VOTING", res.status());
         verify(codeGenerator, times(2)).generate();
         verify(sessionRepository, times(2)).saveAndFlush(any(GameSession.class));
     }
@@ -87,9 +89,8 @@ class GameSessionServiceTest {
     void getSession_valid() {
         UUID hostId = UUID.randomUUID();
 
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
-                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
-                        System.currentTimeMillis())).build();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
+                .createdAt(new Timestamp(System.currentTimeMillis())).build();
 
         User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
 
@@ -106,9 +107,44 @@ class GameSessionServiceTest {
     void getSession_invalid() {
         when(sessionRepository.findBySessionCode("INVALID")).thenReturn(Optional.empty());
 
-        SessionNotFoundException ex = assertThrows(SessionNotFoundException.class, () -> gameSessionService.
-                getSessionByCode("INVALID"));
+        SessionNotFoundException ex = assertThrows(SessionNotFoundException.class, () -> gameSessionService.getSessionByCode("INVALID"));
 
         assertEquals("Session no encontrada", ex.getMessage());
+    }
+
+    @Test
+    void startVoting_hostCanOpenRound() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
+                .votesRevealed(true).createdAt(new Timestamp(System.currentTimeMillis())).build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+        Participant participant = Participant.builder().gameSession(session).user(host).role(Participant.Role.HOST).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
+        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
+        when(sessionRepository.save(session)).thenReturn(session);
+        when(participantRepository.countByGameSession(session)).thenReturn(2L);
+
+        SessionResponse response = gameSessionService.startVoting("host", "ABC123");
+
+        assertEquals("VOTING", response.status());
+        assertFalse(session.isVotesRevealed());
+    }
+
+    @Test
+    void startVoting_rejectsNonHost() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING).build();
+        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
+        Participant participant = Participant.builder().gameSession(session).user(voter).role(Participant.Role.VOTER).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
+        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.of(participant));
+
+        InsufficientRoleException ex = assertThrows(InsufficientRoleException.class, () -> gameSessionService.startVoting("voter", "ABC123"));
+
+        assertEquals("Solo el host puede iniciar la votacion", ex.getMessage());
     }
 }

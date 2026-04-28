@@ -27,15 +27,13 @@ public class JwtService {
     @PostConstruct
     void initializeKey() {
         if (secret == null || secret.trim().isEmpty()) {
-            throw new IllegalStateException(
-                    "Invalid jwt.secret configuration: value must not be null or blank.");
+            throw new IllegalStateException("Invalid jwt.secret configuration: value must not be null or blank.");
         }
 
         byte[] keyBytes = resolveSecretBytes(secret.trim());
         if (keyBytes.length < MIN_HS256_KEY_BYTES) {
-            throw new IllegalStateException(
-                    "Invalid jwt.secret configuration: key must be at least 32 bytes for HS256. " +
-                            "Provide a longer plain-text secret or a Base64-encoded secret representing at least 32 bytes.");
+            throw new IllegalStateException("Invalid jwt.secret configuration: key must be at least 32 bytes for HS256. " +
+                    "Provide a longer plain-text secret or a Base64-encoded secret representing at least 32 bytes.");
         }
 
         this.key = Keys.hmacShaKeyFor(keyBytes);
@@ -58,8 +56,8 @@ public class JwtService {
         return configuredSecret.getBytes(StandardCharsets.UTF_8);
     }
     public String generateToken(String username) {
-        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System.
-                currentTimeMillis() + expiration)).signWith(getKey(), SignatureAlgorithm.HS256).compact();
+        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + expiration)).signWith(getKey(),
+                SignatureAlgorithm.HS256).compact();
     }
 
     public String extractUsername(String token) {

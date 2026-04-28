@@ -17,8 +17,7 @@ public class GameSessionController {
     private final GameSessionService gameSessionService;
 
     @PostMapping
-    public ResponseEntity<SessionResponse> create(@AuthenticationPrincipal String username, @RequestBody
-    @Valid CreateSessionRequest request) {
+    public ResponseEntity<SessionResponse> create(@AuthenticationPrincipal String username, @RequestBody @Valid CreateSessionRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSession(username, request));
     }
 
@@ -31,6 +30,5 @@ public class GameSessionController {
     public ResponseEntity<SessionResponse> join(@AuthenticationPrincipal String username, @PathVariable String code) {
         return ResponseEntity.ok(gameSessionService.joinSession(username, code));
     }
-
 }
 

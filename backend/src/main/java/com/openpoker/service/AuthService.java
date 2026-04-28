@@ -28,8 +28,8 @@ public class AuthService {
             throw new UserAlreadyExistsException("Email");
         }
 
-        User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder
-                .encode(request.password())).role(UserRole.VOTER).build();
+        User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder.encode(request.password())).role(UserRole.VOTER)
+                .build();
 
         userRepository.save(user);
 
@@ -39,8 +39,7 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.username()).orElseThrow(() -> new
-                InvalidCredentialsException());
+        User user = userRepository.findByUsername(request.username()).orElseThrow(() -> new InvalidCredentialsException());
 
         if(!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new InvalidCredentialsException();
