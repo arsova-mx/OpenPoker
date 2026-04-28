@@ -22,13 +22,21 @@ function App() {
             element: <Main/>
           },
           {
-            path:'/login',
-            element: <Login/>
+            path: 'auth',
+            children: [
+              {
+                index: true
+              },
+              {
+                path:'login',
+                element: <Login/>
+              },
+              {
+                path:'register',
+                element: <Register/>
+              }
+            ]
           },
-          {
-            path:'/register',
-            element: <Register/>
-          }
         ]
       }
     ]
