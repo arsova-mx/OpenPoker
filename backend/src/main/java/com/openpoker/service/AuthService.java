@@ -4,6 +4,7 @@ import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
 import com.openpoker.entity.User;
+import com.openpoker.entity.UserRole;
 import com.openpoker.globalexception.InvalidCredentialsException;
 import com.openpoker.globalexception.UserAlreadyExistsException;
 import com.openpoker.repository.UserRepository;
@@ -28,13 +29,13 @@ public class AuthService {
         }
 
         User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder
-                .encode(request.password())).build();
+                .encode(request.password())).role(UserRole.VOTER).build();
 
         userRepository.save(user);
 
         String token = jwtService.generateToken(user.getUsername());
 
-        return new AuthResponse(token, user.getUsername());
+        return new AuthResponse(token, user.getId(), user.getUsername());
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -47,6 +48,6 @@ public class AuthService {
 
         String token = jwtService.generateToken(user.getUsername());
 
-        return new AuthResponse(token, user.getUsername());
+        return new AuthResponse(token, user.getId(), user.getUsername());
     }
 }
