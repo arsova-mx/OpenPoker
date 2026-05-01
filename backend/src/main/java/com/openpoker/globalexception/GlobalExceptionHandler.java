@@ -47,8 +47,8 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
     }
 
-    @ExceptionHandler(InvalidValue.class)
-    public ResponseEntity<?> handleInvalidValue(InvalidValue ex) {
+    @ExceptionHandler(InvalidValueException.class)
+    public ResponseEntity<?> handleInvalidValue(InvalidValueException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
     }
 
@@ -60,5 +60,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidVoteValueException.class)
     public ResponseEntity<?> handleInvalidVoteValue(InvalidVoteValueException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(DeckNotFoundException.class)
+    public ResponseEntity<?> handleDeckNotFoundException(DeckNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 }

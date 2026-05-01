@@ -1,11 +1,8 @@
 package com.openpoker.service;
 
-import com.openpoker.entity.SessionStatus;
-import com.openpoker.globalexception.HostNotFoundException;
-import com.openpoker.globalexception.InsufficientRoleException;
-import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.UserAlreadyInSessionException;
-import com.openpoker.globalexception.UsernameIsNotParticipantSessionException;
+import com.openpoker.entity.*;
+import com.openpoker.globalexception.*;
+import com.openpoker.repository.VotingDeckRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -14,9 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
-import com.openpoker.entity.GameSession;
-import com.openpoker.entity.Participant;
-import com.openpoker.entity.User;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
@@ -32,17 +26,25 @@ public class GameSessionService {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final SessionCodeGenerator codeGenerator;
+    private final VotingDeckRepository deckRepository;
 
     @Transactional
-    public SessionResponse createSession(String username, CreateSessionRequest request) {
-       User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+    public SessionResponse createSession(String username, CreateSessionRequest request, String deckIdentifier) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
+        VotingDeck deck = findDeck(deckIdentifier);
         GameSession session = null;
 
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
 
-            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user.getId()).status(SessionStatus.VOTING).build();
+            GameSession candidate = GameSession.builder()
+                    .sessionCode(code)
+                    .name(request.name())
+                    .hostUserId(user.getId())
+                    .status(SessionStatus.VOTING)
+                    .deck(deck)
+                    .build();
 
             try {
                 session = sessionRepository.saveAndFlush(candidate);
@@ -116,6 +118,15 @@ public class GameSessionService {
         long count = participantRepository.countByGameSession(session);
 
         return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, session.getStatus().name(), count, session.getCreatedAt());
+    }
+
+    private VotingDeck findDeck(String deckIdentifier) {
+        try {
+            java.util.UUID deckId = java.util.UUID.fromString(deckIdentifier);
+            return deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException("Deck no encontrado"));
+        } catch (IllegalArgumentException ignored) {
+            return deckRepository.findByNameIgnoreCase(deckIdentifier.trim()).orElseThrow(() -> new DeckNotFoundException("Deck no encontrado"));
+        }
     }
 
 }

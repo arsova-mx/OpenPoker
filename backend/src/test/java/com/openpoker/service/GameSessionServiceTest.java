@@ -8,11 +8,13 @@ import com.openpoker.entity.Participant;
 import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
+import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.repository.VotingDeckRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -46,19 +48,24 @@ class GameSessionServiceTest {
     @Mock
     private SessionCodeGenerator codeGenerator;
 
+    @Mock
+    private VotingDeckRepository deckRepository;
+
     @InjectMocks
     private GameSessionService gameSessionService;
 
     @Test
     void createSession_success() {
         User user = User.builder().id(UUID.randomUUID()).username("user").role(UserRole.HOST).build();
+        VotingDeck deck = VotingDeck.builder().id(UUID.randomUUID()).name("Fibonacci").build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(deckRepository.findById(deck.getId())).thenReturn(Optional.of(deck));
         when(codeGenerator.generate()).thenReturn("ABC123");
         when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId().toString());
 
         assertNotNull(res);
         assertEquals("ABC123", res.sessionCode());
@@ -69,14 +76,16 @@ class GameSessionServiceTest {
     @Test
     void createSession_retriesWhenUniqueConstraintCollides() {
         User user = User.builder().id(UUID.randomUUID()).username("user").role(UserRole.HOST).build();
+        VotingDeck deck = VotingDeck.builder().id(UUID.randomUUID()).name("Fibonacci").build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(deckRepository.findById(deck.getId())).thenReturn(Optional.of(deck));
         when(codeGenerator.generate()).thenReturn("ABC123", "XYZ789");
         when(sessionRepository.saveAndFlush(any(GameSession.class))).thenThrow(new DataIntegrityViolationException("duplicate key")).thenAnswer(invocation -> invocation
                 .getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId().toString());
 
         assertNotNull(res);
         assertEquals("XYZ789", res.sessionCode());

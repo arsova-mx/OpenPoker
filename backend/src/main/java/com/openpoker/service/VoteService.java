@@ -1,7 +1,6 @@
 package com.openpoker.service;
 
-import com.openpoker.domain.FibonacciDeck;
-import com.openpoker.domain.VotingDeck;
+import com.openpoker.entity.VotingDeck;
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
@@ -38,12 +37,15 @@ public class VoteService {
             throw new UsernameIsNotParticipantSessionException("No eres participante");
         }
 
-        VotingDeck deck = new FibonacciDeck();
-
-        if(!deck.isValid(request.cardValue())) {
-            throw new InvalidVoteValueException("Valor de voto invalido");
+        if (session.getDeck() == null) {
+            throw new IllegalStateException("La sesion no tiene deck configurado");
         }
 
+        boolean valid = session.getDeck().getValues().stream().anyMatch(v -> v.getValue().equals(request.cardValue()));
+
+        if(!valid) {
+            throw new InvalidValueException("Valor invalido");
+        }
         Vote vote = voteRepository.findByGameSessionAndUser(session, user).orElse(Vote.builder().gameSession(session).user(user).build());
 
         vote.setCardValue(request.cardValue());

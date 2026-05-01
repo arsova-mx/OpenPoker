@@ -16,9 +16,10 @@ import org.springframework.web.bind.annotation.*;
 public class GameSessionController {
     private final GameSessionService gameSessionService;
 
-    @PostMapping
-    public ResponseEntity<SessionResponse> create(@AuthenticationPrincipal String username, @RequestBody @Valid CreateSessionRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSession(username, request));
+    @PostMapping("/{deckIdentifier}")
+    public ResponseEntity<SessionResponse> createWithDeck(@AuthenticationPrincipal String username, @PathVariable String deckIdentifier,
+                                                          @RequestBody @Valid CreateSessionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSession(username, request, deckIdentifier));
     }
 
     @GetMapping("/{code}")
