@@ -44,7 +44,7 @@ public class VoteService {
         boolean valid = session.getDeck().getValues().stream().anyMatch(v -> v.getValue().equals(request.cardValue()));
 
         if(!valid) {
-            throw new InvalidValueException("Valor invalido");
+            throw new InvalidVoteValueException("Valor invalido");
         }
         Vote vote = voteRepository.findByGameSessionAndUser(session, user).orElse(Vote.builder().gameSession(session).user(user).build());
 

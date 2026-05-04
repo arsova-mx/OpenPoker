@@ -47,7 +47,12 @@ class VoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        session = GameSession.builder().sessionCode("ABC").status(SessionStatus.VOTING).build();
+        DeckValue v5 = DeckValue.builder().value("5").build();
+        DeckValue v8 = DeckValue.builder().value("8").build();
+        DeckValue v13 = DeckValue.builder().value("13").build();
+        VotingDeck deck = VotingDeck.builder().name("Fibonacci").values(List.of(v5, v8, v13)).build();
+
+        session = GameSession.builder().sessionCode("ABC").status(SessionStatus.VOTING).deck(deck).build();
 
         user = User.builder().username("user").build();
 
