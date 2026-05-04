@@ -11,6 +11,7 @@ import com.openpoker.entity.UserRole;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
+import com.openpoker.globalexception.UserAlreadyInSessionException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
