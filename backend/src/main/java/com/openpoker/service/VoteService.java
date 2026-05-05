@@ -49,7 +49,7 @@ public class VoteService {
                 .cardValue()));
 
         if(!valid) {
-            throw new InvalidValueException("Valor invalido");
+            throw new InvalidVoteValueException("Valor invalido");
         }
 
         Vote vote;
