@@ -31,6 +31,7 @@ public class JwtService {
         }
 
         byte[] keyBytes = resolveSecretBytes(secret.trim());
+
         if (keyBytes.length < MIN_HS256_KEY_BYTES) {
             throw new IllegalStateException("Invalid jwt.secret configuration: key must be at least 32 bytes for HS256. " +
                     "Provide a longer plain-text secret or a Base64-encoded secret representing at least 32 bytes.");
@@ -56,8 +57,8 @@ public class JwtService {
         return configuredSecret.getBytes(StandardCharsets.UTF_8);
     }
     public String generateToken(String username) {
-        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + expiration)).signWith(getKey(),
-                SignatureAlgorithm.HS256).compact();
+        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System
+                .currentTimeMillis() + expiration)).signWith(getKey(), SignatureAlgorithm.HS256).compact();
     }
 
     public String extractUsername(String token) {

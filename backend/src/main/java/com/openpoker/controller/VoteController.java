@@ -17,13 +17,15 @@ public class VoteController {
     private final VoteService service;
 
     @PostMapping
-    public ResponseEntity<VoteResponse> vote(@AuthenticationPrincipal String username, @PathVariable String code, @RequestBody @Valid CastVoteRequest request) {
+    public ResponseEntity<VoteResponse> vote(@AuthenticationPrincipal String username, @PathVariable String code,
+                                             @RequestBody @Valid CastVoteRequest request) {
         return ResponseEntity.ok(service.castVote(username, code, request));
     }
 
     @GetMapping
-    public ResponseEntity<VotingResultsResponse> getVotes(@PathVariable String code) {
-        return ResponseEntity.ok(service.getVotes(code));
+    public ResponseEntity<VotingResultsResponse> getVotes(@AuthenticationPrincipal String username, @PathVariable
+    String code) {
+        return ResponseEntity.ok(service.getVotes(code, username));
     }
 
     @PostMapping("/reveal")

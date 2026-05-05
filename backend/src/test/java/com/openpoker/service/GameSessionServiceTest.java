@@ -11,7 +11,6 @@ import com.openpoker.entity.UserRole;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.UserAlreadyInSessionException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
@@ -66,7 +65,7 @@ class GameSessionServiceTest {
         when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId().toString());
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId());
 
         assertNotNull(res);
         assertEquals("ABC123", res.sessionCode());
@@ -86,7 +85,7 @@ class GameSessionServiceTest {
                 .getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId().toString());
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId());
 
         assertNotNull(res);
         assertEquals("XYZ789", res.sessionCode());
@@ -156,5 +155,25 @@ class GameSessionServiceTest {
         InsufficientRoleException ex = assertThrows(InsufficientRoleException.class, () -> gameSessionService.startVoting("voter", "ABC123"));
 
         assertEquals("Solo el host puede iniciar la votacion", ex.getMessage());
+    }
+
+    @Test
+    void finishSession_hostCanFinish() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
+                .createdAt(new Timestamp(System.currentTimeMillis())).build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+        Participant participant = Participant.builder().gameSession(session).user(host).role(Participant.Role.HOST).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
+        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
+        when(sessionRepository.save(session)).thenReturn(session);
+        when(participantRepository.countByGameSession(session)).thenReturn(2L);
+
+        SessionResponse response = gameSessionService.finishSession("host", "ABC123");
+
+        assertEquals("FINISHED", response.status());
+        assertEquals(SessionStatus.FINISHED, session.getStatus());
     }
 }
