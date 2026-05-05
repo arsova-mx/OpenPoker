@@ -29,7 +29,7 @@ public class AuthService {
         }
 
         User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder
-                .encode(request.password())).role(UserRole.VOTER).build();
+                        .encode(request.password())).role(UserRole.VOTER).build();
 
         userRepository.save(user);
 
