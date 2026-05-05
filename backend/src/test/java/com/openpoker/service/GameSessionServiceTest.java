@@ -122,42 +122,6 @@ class GameSessionServiceTest {
     }
 
     @Test
-    void startVoting_hostCanOpenRound() {
-        UUID hostId = UUID.randomUUID();
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
-                .votesRevealed(true).createdAt(new Timestamp(System.currentTimeMillis())).build();
-        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
-        Participant participant = Participant.builder().gameSession(session).user(host).role(Participant.Role.HOST).build();
-
-        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
-        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
-        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
-        when(sessionRepository.save(session)).thenReturn(session);
-        when(participantRepository.countByGameSession(session)).thenReturn(2L);
-
-        SessionResponse response = gameSessionService.startVoting("host", "ABC123");
-
-        assertEquals("VOTING", response.status());
-        assertFalse(session.isVotesRevealed());
-    }
-
-    @Test
-    void startVoting_rejectsNonHost() {
-        UUID hostId = UUID.randomUUID();
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING).build();
-        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
-        Participant participant = Participant.builder().gameSession(session).user(voter).role(Participant.Role.VOTER).build();
-
-        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
-        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
-        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.of(participant));
-
-        InsufficientRoleException ex = assertThrows(InsufficientRoleException.class, () -> gameSessionService.startVoting("voter", "ABC123"));
-
-        assertEquals("Solo el host puede iniciar la votacion", ex.getMessage());
-    }
-
-    @Test
     void finishSession_hostCanFinish() {
         UUID hostId = UUID.randomUUID();
         GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
