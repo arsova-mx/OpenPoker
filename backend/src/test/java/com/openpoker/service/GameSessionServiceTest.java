@@ -8,11 +8,13 @@ import com.openpoker.entity.Participant;
 import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
+import com.openpoker.entity.VotingDeck;
+import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.UserAlreadyInSessionException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.repository.VotingDeckRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -46,41 +48,48 @@ class GameSessionServiceTest {
     @Mock
     private SessionCodeGenerator codeGenerator;
 
+    @Mock
+    private VotingDeckRepository deckRepository;
+
     @InjectMocks
     private GameSessionService gameSessionService;
 
     @Test
     void createSession_success() {
         User user = User.builder().id(UUID.randomUUID()).username("user").role(UserRole.HOST).build();
+        VotingDeck deck = VotingDeck.builder().id(UUID.randomUUID()).name("Fibonacci").build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(deckRepository.findById(deck.getId())).thenReturn(Optional.of(deck));
         when(codeGenerator.generate()).thenReturn("ABC123");
-        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation
-                .getArgument(0));
+        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId());
 
         assertNotNull(res);
         assertEquals("ABC123", res.sessionCode());
         assertEquals("Sprint 1", res.name());
+        assertEquals("VOTING", res.status());
     }
 
     @Test
     void createSession_retriesWhenUniqueConstraintCollides() {
         User user = User.builder().id(UUID.randomUUID()).username("user").role(UserRole.HOST).build();
+        VotingDeck deck = VotingDeck.builder().id(UUID.randomUUID()).name("Fibonacci").build();
 
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(deckRepository.findById(deck.getId())).thenReturn(Optional.of(deck));
         when(codeGenerator.generate()).thenReturn("ABC123", "XYZ789");
-        when(sessionRepository.saveAndFlush(any(GameSession.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenThrow(new DataIntegrityViolationException("duplicate key")).thenAnswer(invocation -> invocation
+                .getArgument(0));
         when(participantRepository.countByGameSession(any())).thenReturn(1L);
 
-        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"));
+        SessionResponse res = gameSessionService.createSession("user", new CreateSessionRequest("Sprint 1"), deck.getId());
 
         assertNotNull(res);
         assertEquals("XYZ789", res.sessionCode());
+        assertEquals("VOTING", res.status());
         verify(codeGenerator, times(2)).generate();
         verify(sessionRepository, times(2)).saveAndFlush(any(GameSession.class));
     }
@@ -89,9 +98,8 @@ class GameSessionServiceTest {
     void getSession_valid() {
         UUID hostId = UUID.randomUUID();
 
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
-                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
-                        System.currentTimeMillis())).build();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
+                .createdAt(new Timestamp(System.currentTimeMillis())).build();
 
         User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
 
@@ -108,53 +116,28 @@ class GameSessionServiceTest {
     void getSession_invalid() {
         when(sessionRepository.findBySessionCode("INVALID")).thenReturn(Optional.empty());
 
-        SessionNotFoundException ex = assertThrows(SessionNotFoundException.class, () -> gameSessionService.
-                getSessionByCode("INVALID"));
+        SessionNotFoundException ex = assertThrows(SessionNotFoundException.class, () -> gameSessionService.getSessionByCode("INVALID"));
 
         assertEquals("Session no encontrada", ex.getMessage());
     }
 
     @Test
-    void joinSession_success() {
+    void finishSession_hostCanFinish() {
         UUID hostId = UUID.randomUUID();
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
-                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
-                        System.currentTimeMillis())).build();
-        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1").hostUserId(hostId).status(SessionStatus.WAITING)
+                .createdAt(new Timestamp(System.currentTimeMillis())).build();
         User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+        Participant participant = Participant.builder().gameSession(session).user(host).role(Participant.Role.HOST).build();
 
         when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
-        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
-        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.empty());
-        when(userRepository.findById(hostId)).thenReturn(Optional.of(host));
+        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
+        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
+        when(sessionRepository.save(session)).thenReturn(session);
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
 
-        SessionResponse response = gameSessionService.joinSession("voter", "ABC123");
+        SessionResponse response = gameSessionService.finishSession("host", "ABC123");
 
-        assertEquals("ABC123", response.sessionCode());
-        assertEquals("host", response.hostUsername());
-        assertEquals(2L, response.participantCount());
-        verify(participantRepository, times(1)).save(any(Participant.class));
-    }
-
-    @Test
-    void joinSession_userAlreadyInSession() {
-        UUID hostId = UUID.randomUUID();
-        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").name("Sprint 1")
-                .hostUserId(hostId).status(SessionStatus.WAITING).createdAt(new Timestamp(
-                        System.currentTimeMillis())).build();
-        User voter = User.builder().id(UUID.randomUUID()).username("voter").role(UserRole.VOTER).build();
-        Participant existingParticipant = Participant.builder().id(UUID.randomUUID()).gameSession(session).user(voter)
-                .role(Participant.Role.VOTER).build();
-
-        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
-        when(userRepository.findByUsername("voter")).thenReturn(Optional.of(voter));
-        when(participantRepository.findByGameSessionAndUser(session, voter)).thenReturn(Optional.of(
-                existingParticipant));
-
-        UserAlreadyInSessionException exception = assertThrows(UserAlreadyInSessionException.class,
-                () -> gameSessionService.joinSession("voter", "ABC123"));
-
-        assertEquals("El usuario ya esta en la session", exception.getMessage());
+        assertEquals("FINISHED", response.status());
+        assertEquals(SessionStatus.FINISHED, session.getStatus());
     }
 }
