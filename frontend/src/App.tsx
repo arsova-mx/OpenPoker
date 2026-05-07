@@ -56,6 +56,10 @@ import Auth from './routes/Auth';
               }
             ]
           },
+          {
+            path: 'SessionLobby'
+            
+          }
         ]
       }
     ]
