@@ -1,34 +1,38 @@
-import { authService } from "@/services/authService";
-import { Outlet } from "react-router-dom";
+
+import { Outlet, useSubmit } from "react-router-dom";
 import { useEffect } from "react";
+import { getTokenDuration } from "@/hooks/useTokenDuration";
+import useAuthStore from "@/store/authStore";
 
 export default function Root() {
     const token = localStorage.getItem("token")
-    const tokenDuration = localStorage.getItem("tokenDuration");
-    const logout = authService.logout;
+    const logout = useAuthStore( (state) => state.logout);
+    const submit = useSubmit();
 
     useEffect( () => {
-        if (!token || !tokenDuration) {
+
+        if (!token) {
             return;
         }
-        const timeRemaining = (Date.now() + parseInt(tokenDuration)) - Date.now();
-        console.log("Tiempo Restante: "+timeRemaining);
 
-        if(timeRemaining <= 0) {
+        const timeRemaining = getTokenDuration();
+
+        if(token ==='EXPIRED') {
+            submit(null, {action:"/auth/logout", method:"post" });
             logout();
+            console.log("Sesion cerrada: Token expirado")
         }
         
-        const timer = setTimeout( () => {
+        setTimeout( () => {
+            submit(null, {action:"/auth/logout", method:"post" });
             logout();
-            console.log("Tiempo fuera (UseEffect)");
+            console.log("Sesion cerrada: Tiempo agotado")
         }, timeRemaining);
 
-        return () => clearTimeout(timer);
-
-    } , [token, tokenDuration, logout]);
+    } , [token, submit]);
 
     return (
-        <main className=" place-content-start  p-10 min-h-dvh bg-cyan-100">
+        <main className="place-content-start  p-10 min-h-dvh bg-cyan-100">
             <Outlet />
         </main>
     );

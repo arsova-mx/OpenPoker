@@ -1,8 +1,6 @@
 import { LoginRequest, RegisterRequest, AuthResponse } from "../types";
 import { instance } from './APIClient'
-import useAuthStore from "../store/authStore";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
 
 
 const login = async (data: LoginRequest): Promise<AuthResponse> => {
@@ -26,6 +24,7 @@ const login = async (data: LoginRequest): Promise<AuthResponse> => {
 const register = async (data: RegisterRequest): Promise<AuthResponse> => {
     try {
         const response = await instance.post<AuthResponse>('/auth/register', data)
+        console.log(response.data)
         return response.data
     } catch (error) {
         if (axios.isAxiosError(error)){
@@ -37,14 +36,13 @@ const register = async (data: RegisterRequest): Promise<AuthResponse> => {
     }
 }
 
-const saveToken = (token : string) => {
-    const navigate = useNavigate();
+const saveToken = (token: string) => {
     localStorage.setItem("token", token);
-
     const tokenDuration = new Date();
-    tokenDuration.setSeconds(tokenDuration.getSeconds()+10)
+    tokenDuration.setSeconds(tokenDuration.getSeconds()+3600)
     localStorage.setItem('tokenDuration', tokenDuration.toISOString());
-    navigate("/")
+    console.log(tokenDuration)
+    
 }
 
 const getToken = () => {
@@ -53,13 +51,10 @@ const getToken = () => {
 }
 
 const logout = () => {
-    const navigate = useNavigate();
     localStorage.clear();
-    navigate("/");
 }
 
 export const authService = {
-    
     login, register, saveToken, getToken, logout
 }
 

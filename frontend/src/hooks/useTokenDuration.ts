@@ -1,9 +1,9 @@
 
 
-import { authService } from "@/services/authService";
+import { redirect } from "react-router-dom";
 
 export function getTokenDuration() {
-    const tokenDuration = localStorage.getItem('TokenDuration');
+    const tokenDuration = localStorage.getItem('tokenDuration') ?? '';
     const expiration = new Date(tokenDuration);
     const now = new Date()
     const duration = expiration.getTime()-now.getTime();
@@ -14,13 +14,13 @@ export function getAuthToken() {
     const token = localStorage.getItem('token');
 
     if (!token) {
-        return null
+        return 'EXPIRED'
     }
 
     const tokenDuration = getTokenDuration();
 
     if(tokenDuration < 0) {
-        return 'EXPIRED'
+        return 
     }
 
     return token;
@@ -32,7 +32,8 @@ export function loader() {
 
 export function checkAuthLoader() {
     const token = getAuthToken();
-    if (!token) {
-        authService.logout();
+    if(!token) {
+        return redirect('/')
     }
+    return null;
 }

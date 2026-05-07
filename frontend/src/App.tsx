@@ -1,7 +1,8 @@
 
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { loader as TokenLoader } from './hooks/useTokenDuration';
-import Login, {action as loginAction} from './routes/Login';
+import Login from './routes/Login';
+import {action as loginAction} from './routes/Auth';
 import { action as logoutAction } from './routes/Logout';
 import Register from './routes/Register';
 import Main from './routes/Main';
@@ -35,6 +36,7 @@ import Auth from './routes/Auth';
           {
             path: 'auth',
             element: <Auth/>,
+            action: loginAction,
             children: [
               {
                 index: true
@@ -42,7 +44,7 @@ import Auth from './routes/Auth';
               {
                 path:'login',
                 element: <Login/>,
-                action: loginAction
+                
               },
               {
                 path:'register',

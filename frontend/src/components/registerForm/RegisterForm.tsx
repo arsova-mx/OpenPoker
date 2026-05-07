@@ -1,14 +1,9 @@
-import { Link } from "react-router-dom";
+import { Link, useSubmit } from "react-router-dom";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { authService } from "@/services/authService";
 import  * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
-
-type formRegister = {
-    username: string,
-    email: string,
-    password: string
-}
+import useAuthStore from "@/store/authStore";
 
 const registerSchema = z.object({
     username: z.string().min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
@@ -24,24 +19,42 @@ type registerFormData = z.infer<typeof registerSchema>
 
 export default function RegisterForm() {
     const authRegister = authService.register;
+    const submit = useSubmit();
     const login = authService.login;
     const setToken =authService.saveToken
+    const setTokenState = useAuthStore( (state) => state.setToken);
+    const loginState = useAuthStore( (state) => state.login);
 
     const { 
-        register, handleSubmit, watch, formState: {errors}
+        register, handleSubmit, formState: {errors}
     } = useForm<registerFormData>({
         resolver: zodResolver(registerSchema),
         mode: "onTouched"
     }) 
     
     
-    const onSubmit: SubmitHandler<registerFormData> = (data) => {
+    const onSubmit: SubmitHandler<registerFormData> = async(data) => {
         const dataForm = {
             username: data.username, 
             email: data.email, 
             password: data.password
         }
-        authRegister(dataForm);
+        const response = await authRegister(dataForm);
+
+        if(!response.token !== null) {
+            const loginForm = { username: data.username, password: data.password}
+            login(loginForm);
+
+            const token = response.token;
+            setToken(token);
+            const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
+            
+            setTokenState(token, tokenDuration);
+            loginState(data.username, data.password);
+
+            submit(null, { action:'/auth', method: 'post'});
+        }
+        
         
     }
 
@@ -105,12 +118,10 @@ export default function RegisterForm() {
                     className="border rounded-2xl bg-white"
                 />
                 {errors.confirmPassword ? <span className="text-red-800">{errors.confirmPassword.message}</span> : <br />}
-                <p>¿Ya tienes cuenta? <Link to='/auth/login' className="hover:underline">
+                <p className="text-center">¿Ya tienes cuenta? <Link to='/auth/login' className="hover:underline">
                     Iniciar sesión
                     </Link>
                 </p>
-                
-
 
                 <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10">Crear cuenta</button>
             </form>

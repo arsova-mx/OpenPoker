@@ -1,23 +1,58 @@
 
 import { useEffect } from "react";
-import { Link, useRouteError } from "react-router-dom";
+import { Link, useRouteError, isRouteErrorResponse } from "react-router-dom";
 import { toast } from "sonner";
 
 function ErrorGlobal() {
-    const error = useRouteError() as any;
+  
+    const error = useRouteError()
+    let errorMessage: string;
+
+    if( isRouteErrorResponse(error)) {
+      errorMessage = error.statusText || error.data?.message;
+    } else if( error instanceof Error) {
+      errorMessage = error.message;
+    }else if(typeof error === 'string') {
+      errorMessage = error
+    } else {
+      errorMessage = "Error desconocido"
+    }
 
     useEffect( () => {
         toast.error("Error: ", {
-            description: error.statusText || error.message 
+            description: errorMessage
         });
-    }, [error]);
+    }, [errorMessage]);
 
     return(
-        <div className="p-10 text-center">
-            <h1>Esto no deberia pasar. Algo slaio mal</h1>
-            <p>En un momento lo resolvemos</p>
-            <Link to="/">Volver a inicio</Link>
-        </div>
+        <div className="p-40 text-center ">
+        
+      <h1>Algo salió mal</h1>
+      <p>Lo sentimos, ha ocurrido un error inesperado.</p>
+      <br/>
+      <div className="bg-emerald-200 p-64 rounded-lg inline-block hover:shadow-xl/50">
+        
+        {isRouteErrorResponse(error) ? (
+          <p>
+            <strong>Status:</strong> {error.status} <br />
+            <strong> {error.statusText || error.data?.message}</strong>
+          </p>
+        ) : (
+          <p>
+            <strong>Error:</strong> {errorMessage}
+          </p>
+        )}
+      </div>
+
+      <div className="pt-10">
+        <Link to="/" className="hover:bg-emerald-900 hover:text-gray-50 p-2 rounded-lg"> 
+            Volver al Inicio
+        </Link>
+            
+         
+        
+      </div>
+    </div>
     )
 }
 
