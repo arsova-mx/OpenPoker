@@ -8,8 +8,8 @@ export default function Main() {
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const tokenDuration = useAuthStore( (state) => state.tokenDuration)
 
-    function handleLogout () {
-            submit(null, {action:"/auth/logout", method:"post" });
+    function handleLogout() {
+        submit(null, {action:"/auth/logout", method:"post" });
     }
 
     return(
@@ -26,14 +26,13 @@ export default function Main() {
                 <Link to="auth/login" className="hover:underline">Inicia sesion</Link>
                 <Link to="auth/register" className="hover:underline">Registrate</Link>
             </>
-            
             :
                 <button className=
-                "border rounded-2xl bg-emerald-700 text-white px-10 hover:underline cursor-pointer hover:shadow-xl focus:bg-emerald-600 focus:cursor-not-allowed"
-                onClick={() => handleLogout()}
-            >
-                Cerrar Sesion
-            </button>
+                    "border rounded-2xl bg-emerald-800 text-white W-10 hover:underline cursor-pointer hover:bg-emerald-700 focus:cursor-not-allowed"
+                    onClick={() => handleLogout()}
+                >
+                    Cerrar Sesion
+                </button>
             }
             
             

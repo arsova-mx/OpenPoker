@@ -31,7 +31,7 @@ import Auth from './routes/Auth';
           { 
             index: true,
             element: <Main/>,
-
+            
           },
           {
             path: 'auth',

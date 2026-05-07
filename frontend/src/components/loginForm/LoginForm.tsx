@@ -78,7 +78,11 @@ export default function LoginForm() {
                 <p className="text-center">¿No tienes cuenta? <Link to='/auth/register' className="hover:underline">Registrate</Link></p>
                 
 
-                <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10 hover:focus ">Iniciar Sesion</button>
+                <button type="submit" 
+                className="border rounded-2xl bg-emerald-700 text-white px-10 hover:cursor-pointer "
+                >
+                    Iniciar Sesion
+                </button>
 
             </form>
         </div>

@@ -123,7 +123,10 @@ export default function RegisterForm() {
                     </Link>
                 </p>
 
-                <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10">Crear cuenta</button>
+                <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10 hover:cursor-pointer"
+                >
+                    Crear cuenta
+                </button>
             </form>
         </div>
         

@@ -6,7 +6,6 @@ import axios from "axios";
 const login = async (data: LoginRequest): Promise<AuthResponse> => {
     try {
         const response = await instance.post<AuthResponse>('/auth/login', data)
-        console.log("Login exitoso");
         localStorage.setItem('token', response.data.token);
         
         return response.data;
@@ -24,7 +23,6 @@ const login = async (data: LoginRequest): Promise<AuthResponse> => {
 const register = async (data: RegisterRequest): Promise<AuthResponse> => {
     try {
         const response = await instance.post<AuthResponse>('/auth/register', data)
-        console.log(response.data)
         return response.data
     } catch (error) {
         if (axios.isAxiosError(error)){
@@ -41,8 +39,6 @@ const saveToken = (token: string) => {
     const tokenDuration = new Date();
     tokenDuration.setSeconds(tokenDuration.getSeconds()+3600)
     localStorage.setItem('tokenDuration', tokenDuration.toISOString());
-    console.log(tokenDuration)
-    
 }
 
 const getToken = () => {
