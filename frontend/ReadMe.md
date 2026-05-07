@@ -24,3 +24,5 @@ export default defineConfig({
 # Zod
 npm install zod
 
+# Sooner (toast)
+npm install sooner
