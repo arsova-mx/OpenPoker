@@ -1,9 +1,8 @@
 package com.openpoker.service;
 
-import com.openpoker.entity.SessionStatus;
-import com.openpoker.globalexception.HostNotFoundException;
-import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.UserAlreadyInSessionException;
+import com.openpoker.entity.*;
+import com.openpoker.globalexception.*;
+import com.openpoker.repository.VotingDeckRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -12,14 +11,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
-import com.openpoker.entity.GameSession;
-import com.openpoker.entity.Participant;
-import com.openpoker.entity.User;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -30,20 +28,27 @@ public class GameSessionService {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final SessionCodeGenerator codeGenerator;
+    private final VotingDeckRepository deckRepository;
 
     @Transactional
-    public SessionResponse createSession(String username, CreateSessionRequest request) {
-       User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
-               "Usuario no encontrado"));
+    public SessionResponse createSession(String username, CreateSessionRequest request, UUID deckId) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
+                "Usuario no encontrado"));
+
+        VotingDeck deck = deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException(
+                "Deck no encontrado"));
 
         GameSession session = null;
 
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
+
             GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user
-                    .getId()).status(SessionStatus.WAITING).build();
+                    .getId()).status(SessionStatus.VOTING).deck(deck).build();
+
             try {
                 session = sessionRepository.saveAndFlush(candidate);
+
                 break;
             } catch (DataIntegrityViolationException ex) {
                 // Una colisión de restricción única en sessionCode significa que otra solicitud ganó la carrera.
@@ -57,8 +62,7 @@ public class GameSessionService {
             throw new IllegalStateException("No se pudo crear la sesion");
         }
 
-        Participant host = Participant.builder().gameSession(session).user(user).role(Participant.Role.HOST).
-                build();
+        Participant host = Participant.builder().gameSession(session).user(user).role(Participant.Role.HOST).build();
 
         participantRepository.save(host);
 
@@ -68,8 +72,10 @@ public class GameSessionService {
     public SessionResponse getSessionByCode(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
                 SessionNotFoundException("Session no encontrada"));
+
         User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException(
                 "Host no encontrado"));
+
         return mapToResponse(session, host.getUsername());
     }
 
@@ -85,8 +91,8 @@ public class GameSessionService {
             throw new UserAlreadyInSessionException("El usuario ya esta en la session");
         }
 
-        Participant participant = Participant.builder().gameSession(session).user(user).role(
-                Participant.Role.VOTER).build();
+        Participant participant = Participant.builder().gameSession(session).user(user).role(Participant.Role.VOTER)
+                .build();
 
         participantRepository.save(participant);
 
@@ -94,6 +100,27 @@ public class GameSessionService {
                 "Host no encontrado"));
 
         return mapToResponse(session, host.getUsername());
+    }
+
+    public SessionResponse finishSession(String username, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
+                SessionNotFoundException("Session no encontrada"));
+
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
+                "Usuario no encontrado"));
+
+        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() ->
+                new UsernameIsNotParticipantSessionException(
+                "No eres participante"));
+
+        if (participant.getRole() != Participant.Role.HOST) {
+            throw new InsufficientRoleException("Solo el host puede finalizar la session");
+        }
+
+        session.setStatus(SessionStatus.FINISHED);
+        sessionRepository.save(session);
+
+        return mapToResponse(session, user.getUsername());
     }
 
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
