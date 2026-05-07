@@ -13,5 +13,6 @@ import com.openpoker.entity.User;
 @Repository
 public interface ParticipantRepository extends JpaRepository<Participant, UUID> {
     Optional<Participant> findByGameSessionAndUser(GameSession gameSession, User user);
+    java.util.List<Participant> findAllByGameSession(GameSession gameSession);
     long countByGameSession(GameSession gameSession);
 }
