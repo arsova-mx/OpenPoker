@@ -20,3 +20,7 @@ export default defineConfig({
     tailwindcss(),
   ],
 }) -->
+
+# Zod
+npm install zod
+
