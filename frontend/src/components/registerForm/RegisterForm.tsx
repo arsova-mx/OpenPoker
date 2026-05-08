@@ -4,6 +4,9 @@ import { authService } from "@/services/authService";
 import  * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAuthStore from "@/store/authStore";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 const registerSchema = z.object({
     username: z.string().min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
@@ -21,7 +24,7 @@ export default function RegisterForm() {
     const authRegister = authService.register;
     const submit = useSubmit();
     const login = authService.login;
-    const setToken =authService.saveToken
+    const setToken = authService.saveToken
     const setTokenState = useAuthStore( (state) => state.setToken);
     const loginState = useAuthStore( (state) => state.login);
 
@@ -41,7 +44,7 @@ export default function RegisterForm() {
         }
         const response = await authRegister(dataForm);
 
-        if(!response.token !== null) {
+        if(response.token !== null) {
             const loginForm = { username: data.username, password: data.password}
             login(loginForm);
 
@@ -54,81 +57,76 @@ export default function RegisterForm() {
 
             submit(null, { action:'/auth', method: 'post'});
         }
-        
-        
     }
 
     return(
-        <div className="">
-            <form onSubmit={handleSubmit(onSubmit)} className="grid flex justify-center">
-                <label htmlFor="email">Correo:</label>
-                <input type="email" 
-                    {
-                        ...register(
-                            "email",
-                            {
-                                required: "Email requerido",
-                            }
-                        )
-                    }
-                    className="rounded-2xl border bg-white"
-                    id='email' 
-                    placeholder='Correo'
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="email">Correo</Label>
+                <Input 
+                    type="email" 
+                    {...register("email", { required: "Email requerido" })}
+                    id="email" 
+                    placeholder="correo@ejemplo.com"
+                    aria-invalid={!!errors.email}
                 />
-                {errors.email ? <span className="text-red-800">{errors.email.message}</span> : <br />}
+                {errors.email && (
+                    <p className="text-sm text-destructive">{errors.email.message}</p>
+                )}
+            </div>
 
-                <label htmlFor="username">Nombre de usuario:</label>
-                <input type="text" 
-                    {...register(
-                        "username", 
-                        {   
-                            required: "Nombre de usuario requerido",
-                        }
-                    )} 
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="username">Nombre de usuario</Label>
+                <Input 
+                    type="text" 
+                    {...register("username", { required: "Nombre de usuario requerido" })} 
                     id="username"
-                    className="rounded-2xl border bg-white"
                     placeholder="Nombre de usuario"
+                    aria-invalid={!!errors.username}
                 />
-                {errors.username ? <span className="text-red-800">{errors.username.message}</span> : <br />}
+                {errors.username && (
+                    <p className="text-sm text-destructive">{errors.username.message}</p>
+                )}
+            </div>
 
-                <label htmlFor="password"> Contraseña:</label>
-                <input type="password" 
-                    {...register(
-                        "password", 
-                        {
-                            required: "Contraseña requerida",
-                        }
-                    )}
-                    id="username"
-                    placeholder="Contraseña" 
-                    className="border rounded-2xl bg-white"
-                />
-                {errors.password ? <span className="text-red-800">{errors.password.message}</span> : <br />}
-
-                <label htmlFor="confirmPassword"> Repita la contraseña:</label>
-                <input type="password" 
-                    {...register(
-                        "confirmPassword", 
-                        {
-                            required: "Repita la contraseña",
-                        }
-                    )}
-                    id="username" 
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="password">Contraseña</Label>
+                <Input 
+                    type="password" 
+                    {...register("password", { required: "Contraseña requerida" })}
+                    id="password" 
                     placeholder="Contraseña"
-                    className="border rounded-2xl bg-white"
+                    aria-invalid={!!errors.password}
                 />
-                {errors.confirmPassword ? <span className="text-red-800">{errors.confirmPassword.message}</span> : <br />}
-                <p className="text-center">¿Ya tienes cuenta? <Link to='/auth/login' className="hover:underline">
-                    Iniciar sesión
-                    </Link>
-                </p>
+                {errors.password && (
+                    <p className="text-sm text-destructive">{errors.password.message}</p>
+                )}
+            </div>
 
-                <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10 hover:cursor-pointer"
-                >
-                    Crear cuenta
-                </button>
-            </form>
-        </div>
-        
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="confirmPassword">Repite la contraseña</Label>
+                <Input 
+                    type="password" 
+                    {...register("confirmPassword", { required: "Repita la contraseña" })}
+                    id="confirmPassword" 
+                    placeholder="Contraseña"
+                    aria-invalid={!!errors.confirmPassword}
+                />
+                {errors.confirmPassword && (
+                    <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+                )}
+            </div>
+
+            <Button type="submit" className="w-full mt-2">
+                Crear cuenta
+            </Button>
+
+            <p className="text-center text-sm text-muted-foreground">
+                ¿Ya tienes cuenta?{" "}
+                <Link to="/auth/login" className="text-primary font-medium hover:underline">
+                    Iniciar sesión
+                </Link>
+            </p>
+        </form>
     );
 }

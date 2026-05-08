@@ -15,23 +15,26 @@ export default function Root() {
             return;
         }
 
-        const timeRemaining = getTokenDuration();
-
         if(token ==='EXPIRED') {
             submit(null, {action:"/auth/logout", method:"post" });
             logout();
+            return;
         }
+
+        const timeRemaining = getTokenDuration();
         
-        setTimeout( () => {
+        const timer = setTimeout( () => {
             submit(null, {action:"/auth/logout", method:"post" });
             logout();
         }, timeRemaining);
 
-    } , [token, submit]);
+        return () => clearTimeout(timer);
+
+    } , [token, submit, logout]);
 
     return (
-        <main className="place-content-start  p-10 min-h-dvh bg-cyan-100">
+        <div className="min-h-dvh bg-background">
             <Outlet />
-        </main>
+        </div>
     );
 }

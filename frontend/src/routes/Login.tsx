@@ -3,9 +3,16 @@ import LoginForm from "../components/loginForm/LoginForm";
 
 export default function Login() {
     return (
-        <div className="rounded-xl bg-emerald-200 h-70 w-100">
-            <h1 className="text-center">Página de Inicio de sesión</h1>
-            <LoginForm/>
+        <div className="flex flex-col gap-6">
+            <div className="text-center lg:text-left">
+                <h1 className="text-2xl font-heading font-bold tracking-tight text-foreground">
+                    Iniciar sesión
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                    Ingresa tus credenciales para volver a estimar con tu equipo
+                </p>
+            </div>
+            <LoginForm />
         </div>
     );
 }
