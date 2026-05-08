@@ -1,16 +1,17 @@
 
-import { useForm, SubmitHandler } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import useAuthStore from "@/store/authStore"
 import { authService } from "@/services/authService";
 import { Link, useSubmit } from "react-router-dom";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input-ref";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
-type formLogin = {
-    username: string,
-    password: string
-}
+import { toast } from "sonner";
+import * as z from "zod"
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Field, FieldError, FieldLabel } from "../ui/field";
+
 
 export default function LoginForm() {
     const submit = useSubmit()
@@ -21,13 +22,28 @@ export default function LoginForm() {
     const login = authService.login;
     const setToken = authService.saveToken;
    
-    
-    const {
-        register, handleSubmit, formState: {errors}
-    } = useForm<formLogin>()
+    const formSchema = z.object({
+    username: z
+        .string()
+        .min(1, "Ingrese un Nombre de usuario"),
+    password: z
+        .string()
+        .min(6, "La contraseña debe tener al menos 6 caracteres"),
+    })
 
-    const onSubmit: SubmitHandler<formLogin> = async (data) => {
-        const response = await login(data);
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        mode: "onTouched",
+        defaultValues: {
+            username: "",
+            password: "",
+        },
+  });
+
+    async function onSubmit(data: z.infer<typeof formSchema>) {
+
+    const response = await login(data);
+    console.log(response);
 
         if(response.token !== null) {
             const token = response.token;
@@ -38,43 +54,57 @@ export default function LoginForm() {
             loginState(data.username, data.password);
             submit(null, {action:"/auth",method: 'post'});
         }
-    }
-
+  }
 
     return (
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-                <Label htmlFor="username">Usuario</Label>
-                <Input 
-                    type="text" 
-                    {...register("username", { required: "Nombre de usuario requerido" })} 
-                    id="username"
-                    placeholder="Nombre de usuario"
-                    aria-invalid={!!errors.username}
+                <Controller 
+                    name= "username"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="username">
+                                Usuario
+                            </FieldLabel >
+                            <Input 
+                                type="text"
+                                {...field} 
+                                id="username"
+                                placeholder="Nombre de usuario"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
-                {errors.username && (
-                    <p className="text-sm text-destructive">{errors.username.message}</p>
-                )}
             </div>
 
             <div className="flex flex-col gap-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <Input 
-                    type="password" 
-                    {...register("password", {
-                        required: "Contraseña requerida",
-                        minLength: {
-                            value: 6,
-                            message: "La contraseña debe tener al menos 6 caracteres"
-                        }
-                    })}
-                    id="password" 
-                    placeholder="Contraseña"
-                    aria-invalid={!!errors.password}
+                <Controller 
+                    name= "password"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <>
+                            <Label htmlFor="password">Contraseña</Label>
+                            <Input 
+                                type="password" 
+                                {...field} 
+                                id="password"
+                                placeholder="Contraseña"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </>
+                    ))
+                    }
                 />
-                {errors.password && (
-                    <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
+                
             </div>
 
             <Button type="submit" className="w-full mt-2">
