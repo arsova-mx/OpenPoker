@@ -33,9 +33,6 @@ class WebSocketTest {
     @Mock
     private WebSocketSessionRegistry sessionRegistry;
 
-    @Mock
-    private SimpMessageHeaderAccessor headerAccessor;
-
     @InjectMocks
     private WebSocketController webSocketController;
 
@@ -47,9 +44,9 @@ class WebSocketTest {
                 participant.getUser().getId(),
                 "alice",
                 "VOTER"));
+        SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
-        when(headerAccessor.getSessionId()).thenReturn("ws-session-1");
 
         webSocketController.join(new WebSocketJoinSessionRequest("ABC123", "alice"), headerAccessor);
 
@@ -67,9 +64,9 @@ class WebSocketTest {
                 participant.getUser().getId(),
                 "host",
                 "HOST"));
+        SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
-        when(headerAccessor.getSessionId()).thenReturn("ws-session-1");
 
         webSocketController.leave(new WebSocketLeaveSessionRequest("ABC123", "alice"), headerAccessor);
 
@@ -84,5 +81,11 @@ class WebSocketTest {
         GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").build();
 
         return Participant.builder().id(UUID.randomUUID()).gameSession(session).user(user).role(role).build();
+    }
+
+    private SimpMessageHeaderAccessor buildHeaderAccessor(String sessionId) {
+        SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.create();
+        headerAccessor.setSessionId(sessionId);
+        return headerAccessor;
     }
 }

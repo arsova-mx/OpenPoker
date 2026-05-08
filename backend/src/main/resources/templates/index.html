@@ -5,9 +5,8 @@
     <title>OpenPoker WS Test</title>
 </head>
 <body>
-<input id="sessionId" placeholder="sessionId" />
 <input id="inviteCode" placeholder="inviteCode" />
-<input id="displayName" placeholder="displayName" value="Alice" />
+<input id="username" placeholder="username" value="Alice" />
 
 <button id="connect">Conectar</button>
 <button id="join">Join</button>
@@ -26,7 +25,7 @@
     let client = null;
 
     document.getElementById("connect").onclick = () => {
-      const sessionId = document.getElementById("sessionId").value;
+      const inviteCode = document.getElementById("inviteCode").value;
 
       client = new StompJs.Client({
         webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
@@ -37,12 +36,12 @@
       client.onConnect = () => {
         log("Conectado a /ws");
 
-        client.subscribe(`/topic/session/${sessionId}/participants`, (message) => {
+        client.subscribe(`/topic/session/${inviteCode}/participants`, (message) => {
           log("Participants update:");
           log(message.body);
         });
 
-        log(`Suscrito a /topic/session/${sessionId}/participants`);
+        log(`Suscrito a /topic/session/${inviteCode}/participants`);
       };
 
       client.onStompError = (frame) => {
@@ -55,17 +54,17 @@
 
     document.getElementById("join").onclick = () => {
       const inviteCode = document.getElementById("inviteCode").value;
-      const displayName = document.getElementById("displayName").value;
+      const username = document.getElementById("username").value;
 
       client.publish({
         destination: "/app/session.join",
         body: JSON.stringify({
           inviteCode,
-          displayName
+          username
         })
       });
 
-      log(`Join enviado con inviteCode=${inviteCode}`);
+      log(`Join enviado con inviteCode=${inviteCode}, username=${username}`);
     };
 </script>
 </body>

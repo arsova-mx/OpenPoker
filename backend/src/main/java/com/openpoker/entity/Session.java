@@ -37,4 +37,9 @@ public class Session {
         createdAt = new Timestamp(System.currentTimeMillis());
         updatedAt = new Timestamp(System.currentTimeMillis());
     }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = new Timestamp(System.currentTimeMillis());
+    }
 }
