@@ -12,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.util.List;
@@ -29,6 +30,12 @@ class WebSocketTest {
     @Mock
     private SimpMessagingTemplate messagingTemplate;
 
+    @Mock
+    private WebSocketSessionRegistry sessionRegistry;
+
+    @Mock
+    private SimpMessageHeaderAccessor headerAccessor;
+
     @InjectMocks
     private WebSocketController webSocketController;
 
@@ -42,11 +49,13 @@ class WebSocketTest {
                 "VOTER"));
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
+        when(headerAccessor.getSessionId()).thenReturn("ws-session-1");
 
-        webSocketController.join(new WebSocketJoinSessionRequest("ABC123", "alice"));
+        webSocketController.join(new WebSocketJoinSessionRequest("ABC123", "alice"), headerAccessor);
 
         verify(sessionService).joinSession("alice", "ABC123");
         verify(sessionService).getParticipants("ABC123");
+        verify(sessionRegistry).register("ws-session-1", "alice", "ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", expected);
     }
 
@@ -60,11 +69,13 @@ class WebSocketTest {
                 "HOST"));
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
+        when(headerAccessor.getSessionId()).thenReturn("ws-session-1");
 
-        webSocketController.leave(new WebSocketLeaveSessionRequest("ABC123", "alice"));
+        webSocketController.leave(new WebSocketLeaveSessionRequest("ABC123", "alice"), headerAccessor);
 
         verify(sessionService).leaveSession("alice", "ABC123");
         verify(sessionService).getParticipants("ABC123");
+        verify(sessionRegistry).unregister("ws-session-1");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", expected);
     }
 

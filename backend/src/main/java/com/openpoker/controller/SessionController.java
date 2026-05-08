@@ -21,6 +21,6 @@ public class SessionController {
     public ResponseEntity<Map<String, Object>> create(@RequestBody Map<String, String> req) {
         Session s = sessionService.createSession(req.get("name"));
 
-        return ResponseEntity.ok().body(Map.of("sessionId,", s.getId(), "inviteCode", s.getInviteCode()));
+        return ResponseEntity.ok().body(Map.of("sessionId", s.getId(), "inviteCode", s.getInviteCode()));
     }
 }
