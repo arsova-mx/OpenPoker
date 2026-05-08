@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket STOMP Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        h2 { color: #569cd6; }
+        input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
+        button { cursor: pointer; background: #0e639c; border: none; }
+        button:hover { background: #1177bb; }
+        #log { background: #111; padding: 12px; margin-top: 12px; max-height: 400px; overflow-y: auto; border-radius: 4px; white-space: pre-wrap; }
+        .connected { color: #4ec9b0; }
+        .error { color: #f44747; }
+        .msg { color: #ce9178; }
+        .sent { color: #dcdcaa; }
+    </style>
+</head>
+<body>
+    <h2>OpenPoker — WebSocket STOMP Tester</h2>
+
+    <div>
+        <label>Invite Code: <input id="inviteCode" value="" placeholder="ABC123"></label>
+        <label>Username: <input id="username" value="" placeholder="testUser"></label>
+    </div>
+    <div style="margin-top:8px">
+        <button onclick="connect()">Connect</button>
+        <button onclick="joinSession()">Join Session</button>
+        <button onclick="leaveSession()">Leave Session</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        let stompClient = null;
+
+        function log(msg, cls = '') {
+            const el = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            el.innerHTML += `<span class="${cls}">[${time}] ${msg}</span>\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function connect() {
+            const ws = new WebSocket('ws://localhost:8080/ws-native', ['v12.stomp']);
+            stompClient = Stomp.over(ws);
+
+            stompClient.connect({}, function (frame) {
+                log('CONNECTED: ' + frame, 'connected');
+
+                const code = document.getElementById('inviteCode').value;
+                if (code) {
+                    stompClient.subscribe('/topic/session/' + code + '/participants', function (message) {
+                        log('RECEIVED participants: ' + message.body, 'msg');
+                    });
+                    log('Subscribed to /topic/session/' + code + '/participants', 'connected');
+                }
+            }, function (error) {
+                log('ERROR: ' + error, 'error');
+            });
+        }
+
+        function joinSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.join', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT join: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function leaveSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.leave', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT leave: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function disconnect() {
+            if (stompClient) {
+                stompClient.disconnect(function () {
+                    log('DISCONNECTED', 'error');
+                });
+            }
+        }
+    </script>
+</body>
+</html>

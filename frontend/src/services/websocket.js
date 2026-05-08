@@ -1,7 +1,7 @@
 import SockJS from "sockjs-client";
 import { Stomp } from "@stomp/stompjs";
 
-export function connectToSession(sessionId, inviteCode, displayName) {
+export function connectToSession(sessionId, inviteCode, username) {
 
   const socket = new SockJS("http://localhost:8080/ws");
   const stomp = Stomp.over(socket);
@@ -17,7 +17,7 @@ export function connectToSession(sessionId, inviteCode, displayName) {
     // Unirse a la session
     stomp.send("/app/session.join", {}, JSON.stringify({
       inviteCode,
-      displayName
+      username
     }));
   });
 
