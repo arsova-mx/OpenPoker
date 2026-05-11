@@ -36,14 +36,13 @@ class WebSocketTest {
     @InjectMocks
     private WebSocketController webSocketController;
 
+
+
     @Test
     void join_broadcastsParticipantsToInviteCodeTopic() {
         Participant participant = buildParticipant("alice", Participant.Role.VOTER);
         List<Participant> participants = List.of(participant);
-        List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(
-                participant.getUser().getId(),
-                "alice",
-                "VOTER"));
+        List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(participant.getUser().getId(), "alice", "VOTER"));
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
@@ -60,10 +59,7 @@ class WebSocketTest {
     void leave_broadcastsParticipantsToInviteCodeTopic() {
         Participant participant = buildParticipant("host", Participant.Role.HOST);
         List<Participant> participants = List.of(participant);
-        List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(
-                participant.getUser().getId(),
-                "host",
-                "HOST"));
+        List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(participant.getUser().getId(), "host", "HOST"));
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
