@@ -10,7 +10,8 @@ import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.Vote;
 import com.openpoker.entity.VotingDeck;
-import com.openpoker.globalexception.InvalidValueException;
+import com.openpoker.globalexception.InvalidVoteValueException;
+import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotInVotingException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
@@ -30,6 +31,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.verify;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -56,7 +58,19 @@ class VoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        session = GameSession.builder().sessionCode("ABC").status(SessionStatus.VOTING).build();
+        VotingDeck deck = VotingDeck.builder()
+                .id(UUID.randomUUID())
+                .name("Fibonacci")
+                .values(List.of(
+                        DeckValue.builder().value("1").build(),
+                        DeckValue.builder().value("2").build(),
+                        DeckValue.builder().value("3").build(),
+                        DeckValue.builder().value("5").build(),
+                        DeckValue.builder().value("8").build()
+                ))
+                .build();
+
+        session = GameSession.builder().sessionCode("ABC").status(SessionStatus.VOTING).deck(deck).build();
 
         user = User.builder().id(UUID.randomUUID()).username("user").build();
 
@@ -85,7 +99,7 @@ class VoteServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
 
-        assertThrows(InvalidValueException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("999")));
+        assertThrows(InvalidVoteValueException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("999")));
     }
 
     @Test
@@ -130,7 +144,7 @@ class VoteServiceTest {
         VotingResultsResponse res = service.revealVotes("user", "ABC");
 
         assertTrue(res.revealed());
-        assertEquals(SessionStatus.WAITING, session.getStatus());
+        assertEquals(SessionStatus.REVEALED, session.getStatus());
     }
 
     @Test
@@ -163,5 +177,44 @@ class VoteServiceTest {
         VotingResultsResponse res = service.getVotes("ABC", "user");
 
         assertEquals("5", res.votes().get(0).cardValue());
+    }
+
+    @Test
+    void resetVotes_deletesCurrentRoundVotesAndMovesSessionToVoting() {
+        UUID sessionId = UUID.randomUUID();
+        session.setId(sessionId);
+        session.setStatus(SessionStatus.REVEALED);
+        session.setVotesRevealed(true);
+
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(sessionRepository.save(session)).thenReturn(session);
+
+        participant.setRole(Participant.Role.HOST);
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+
+        service.resetVotes("user", sessionId);
+
+        verify(voteRepository).deleteAllByGameSession(session);
+        verify(sessionRepository).save(session);
+        assertEquals(SessionStatus.VOTING, session.getStatus());
+        assertTrue(!session.isVotesRevealed());
+    }
+
+    @Test
+    void resetVotes_rejectsWhenUserIsNotHost() {
+        UUID sessionId = UUID.randomUUID();
+        session.setId(sessionId);
+        session.setStatus(SessionStatus.REVEALED);
+        session.setVotesRevealed(true);
+
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+
+        InsufficientRoleException ex = assertThrows(InsufficientRoleException.class,
+                () -> service.resetVotes("user", sessionId));
+
+        assertEquals("Solo el host puede reiniciar la votacion", ex.getMessage());
     }
 }

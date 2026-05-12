@@ -1,7 +1,6 @@
 package com.openpoker.config;
 
 import com.openpoker.dto.WebSocketParticipantResponse;
-import com.openpoker.entity.Participant;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
@@ -27,24 +26,15 @@ public class WebSocketDisconnectListener {
         String wsSessionId = event.getSessionId();
 
         registry.unregister(wsSessionId).ifPresent(info -> {
-            log.info("WebSocket disconnected: user={}, inviteCode={}, reason={}",
-                    info.username(), info.inviteCode(), event.getCloseStatus());
+            log.info("WebSocket disconnected: user={}, inviteCode={}, reason={}", info.username(), info.inviteCode(), event.getCloseStatus());
 
             try {
                 gameSessionService.leaveSession(info.username(), info.inviteCode());
 
-                List<WebSocketParticipantResponse> participants = gameSessionService
-                        .getParticipants(info.inviteCode())
-                        .stream()
-                        .map(p -> new WebSocketParticipantResponse(
-                                p.getUser().getId(),
-                                p.getUser().getUsername(),
-                                p.getRole().name()))
-                        .toList();
+                List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode()).stream().map(p -> new WebSocketParticipantResponse(p
+                        .getUser().getId(), p.getUser().getUsername(),p.getRole().name())).toList();
 
-                messagingTemplate.convertAndSend(
-                        "/topic/session/" + info.inviteCode() + "/participants",
-                        participants);
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
             } catch (Exception e) {
                 log.warn("Error cleaning up after disconnect: user={}, error={}",
                         info.username(), e.getMessage());

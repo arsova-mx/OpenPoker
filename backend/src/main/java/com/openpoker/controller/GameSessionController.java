@@ -24,10 +24,9 @@ public class GameSessionController {
     private final VotingDeckRepository  votingDeckRepository;
 
     @PostMapping("/{deckId}")
-    public ResponseEntity<SessionResponse> createWithDeck(@AuthenticationPrincipal String username, @PathVariable
-    UUID deckId, @RequestBody @Valid CreateSessionRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSession(username, request,
-                deckId));
+    public ResponseEntity<SessionResponse> createWithDeck(@AuthenticationPrincipal String username, @PathVariable UUID deckId, @RequestBody
+    @Valid CreateSessionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSession(username, request, deckId));
     }
 
     @GetMapping("/{code}")
@@ -42,8 +41,7 @@ public class GameSessionController {
 
     @GetMapping
     public List<VotingDeckResponse> getAllDecks() {
-        return votingDeckRepository.findAll().stream().map(deck -> new VotingDeckResponse(deck.getId(),
-                deck.getName())).toList();
+        return votingDeckRepository.findAll().stream().map(deck -> new VotingDeckResponse(deck.getId(), deck.getName())).toList();
     }
 
     @PostMapping("/{code}/finish")

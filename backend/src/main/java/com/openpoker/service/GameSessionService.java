@@ -33,19 +33,16 @@ public class GameSessionService {
 
     @Transactional
     public SessionResponse createSession(String username, CreateSessionRequest request, UUID deckId) {
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
-                "Usuario no encontrado"));
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
-        VotingDeck deck = deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException(
-                "Deck no encontrado"));
+        VotingDeck deck = deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException("Deck no encontrado"));
 
         GameSession session = null;
 
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
 
-            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user
-                    .getId()).status(SessionStatus.VOTING).deck(deck).build();
+            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user.getId()).status(SessionStatus.VOTING).deck(deck).build();
 
             try {
                 session = sessionRepository.saveAndFlush(candidate);
@@ -71,47 +68,41 @@ public class GameSessionService {
     }
 
     public SessionResponse getSessionByCode(String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
-                SessionNotFoundException("Session no encontrada"));
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException(
-                "Host no encontrado"));
+        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
 
         return mapToResponse(session, host.getUsername());
     }
 
 
     public SessionResponse joinSession(String username, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
-                SessionNotFoundException("Session no encontrada"));
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
-                "Usuario no encontrado"));
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
         if(participantRepository.findByGameSessionAndUser(session, user).isPresent()) {
             throw new UserAlreadyInSessionException("El usuario ya esta en la session");
         }
 
-        Participant participant = Participant.builder().gameSession(session).user(user).role(Participant.Role.VOTER)
-                .build();
+        Participant.Role role = session.getHostUserId().equals(user.getId()) ? Participant.Role.HOST : Participant.Role.VOTER;
+
+        Participant participant = Participant.builder().gameSession(session).user(user).role(role).build();
 
         participantRepository.save(participant);
 
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException(
-                "Host no encontrado"));
+        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
 
         return mapToResponse(session, host.getUsername());
     }
 
+    @Transactional
     public SessionResponse finishSession(String username, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
-                SessionNotFoundException("Session no encontrada"));
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
-                "Usuario no encontrado"));
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
-        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() ->
-                new UsernameIsNotParticipantSessionException(
+        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> new UsernameIsNotParticipantSessionException(
                 "No eres participante"));
 
         if (participant.getRole() != Participant.Role.HOST) {
@@ -120,31 +111,32 @@ public class GameSessionService {
 
         session.setStatus(SessionStatus.FINISHED);
         sessionRepository.save(session);
+        participantRepository.deleteAllByGameSession(session);
 
         return mapToResponse(session, user.getUsername());
     }
 
     public List<Participant> getParticipants(String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
-                SessionNotFoundException("Session no encontrada"));
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         return participantRepository.findAllByGameSession(session);
     }
 
     public SessionResponse leaveSession(String username, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
-                SessionNotFoundException("Session no encontrada"));
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
-                "Usuario no encontrado"));
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
-        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() ->
-                new UsernameIsNotParticipantSessionException("No eres participante"));
+        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> new UsernameIsNotParticipantSessionException(
+                "No eres participante"));
+
+        if (session.getHostUserId().equals(user.getId())) {
+            throw new InsufficientRoleException("El host no puede abandonar la session");
+        }
 
         participantRepository.delete(participant);
 
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException(
-                "Host no encontrado"));
+        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
 
         return mapToResponse(session, host.getUsername());
     }
@@ -152,8 +144,7 @@ public class GameSessionService {
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
         long count = participantRepository.countByGameSession(session);
 
-        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername,
-                session.getStatus().name(), count, session.getCreatedAt());
+        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, session.getStatus().name(), count, session.getCreatedAt());
     }
 
 }
