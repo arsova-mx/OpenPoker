@@ -121,6 +121,10 @@ public class VoteService {
     public void resetVotes(String username, UUID sessionId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
+        if(session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionNotInVotingException("Session finalizada");
+        }
+
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
         Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> new UsernameIsNotParticipantSessionException(

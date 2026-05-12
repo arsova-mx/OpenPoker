@@ -147,4 +147,18 @@ public class GameSessionService {
         return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, session.getStatus().name(), count, session.getCreatedAt());
     }
 
+    public void handleDisconnect(String username, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+
+        if (session.getHostUserId().equals(user.getId())) {
+            // Si es el host, finalizar la sesión
+            finishSession(username, code);
+        } else {
+            // Si no es el host, simplemente abandonar
+            leaveSession(username, code);
+        }
+    }
+
 }

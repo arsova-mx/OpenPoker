@@ -29,7 +29,7 @@ public class WebSocketDisconnectListener {
             log.info("WebSocket disconnected: user={}, inviteCode={}, reason={}", info.username(), info.inviteCode(), event.getCloseStatus());
 
             try {
-                gameSessionService.leaveSession(info.username(), info.inviteCode());
+                gameSessionService.handleDisconnect(info.username(), info.inviteCode());
 
                 List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode()).stream().map(p -> new WebSocketParticipantResponse(p
                         .getUser().getId(), p.getUser().getUsername(),p.getRole().name())).toList();

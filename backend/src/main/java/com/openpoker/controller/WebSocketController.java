@@ -58,12 +58,15 @@ public class WebSocketController {
     }
 
     @MessageMapping("/session.vote")
-    public void vote(Map<String, String> payload) {
-        String inviteCode = payload.get("inviteCode");
-        String username = payload.get("username");
+    public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
         String cardValue = payload.get("cardValue");
 
         try {
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionInfo.inviteCode();
+            String username = sessionInfo.username();
+
             voteService.castVote(username, inviteCode, new CastVoteRequest(cardValue));
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(inviteCode, username));
@@ -74,11 +77,14 @@ public class WebSocketController {
     }
 
     @MessageMapping("/session.reveal")
-    public void reveal(Map<String, String> payload) {
-        String inviteCode = payload.get("inviteCode");
-        String username = payload.get("username");
+    public void reveal(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
 
         try {
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionInfo.inviteCode();
+            String username = sessionInfo.username();
+
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.revealVotes(username, inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
         } catch (RuntimeException ex) {
@@ -87,27 +93,33 @@ public class WebSocketController {
     }
 
     @MessageMapping("/session.reset-votes")
-    public void resetVotes(Map<String, String> payload) {
-        String inviteCode = payload.get("inviteCode");
-        String sessionId = payload.get("sessionId");
-        String username = payload.get("username");
+    public void resetVotes(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
 
         try {
-            voteService.resetVotes(username, java.util.UUID.fromString(sessionId));
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionInfo.inviteCode();
+            String username = sessionInfo.username();
+            var sessionState = service.getSessionByCode(inviteCode);
+            String resolvedInviteCode = sessionState.sessionCode();
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(inviteCode, username));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            voteService.resetVotes(username, sessionState.id());
+
+            messagingTemplate.convertAndSend("/topic/session/" + resolvedInviteCode + "/votes", voteService.getVotes(resolvedInviteCode, username));
+            messagingTemplate.convertAndSend("/topic/session/" + resolvedInviteCode + "/state", service.getSessionByCode(resolvedInviteCode));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reset-votes", ex);
         }
     }
 
     @MessageMapping("/session.finish")
-    public void finish(Map<String, String> payload) {
-        String inviteCode = payload.get("inviteCode");
-        String username = payload.get("username");
+    public void finish(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
 
         try {
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionInfo.inviteCode();
+            String username = sessionInfo.username();
             Object sessionState = service.finishSession(username, inviteCode);
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", List.of());
@@ -120,6 +132,16 @@ public class WebSocketController {
     private List<WebSocketParticipantResponse> mapParticipants(List<Participant> participants) {
         return participants.stream().map(participant -> new WebSocketParticipantResponse(participant.getUser().getId(), participant.getUser().getUsername(), participant
                 .getRole().name())).toList();
+    }
+
+    private WebSocketSessionRegistry.SessionInfo getRequiredSessionInfo(SimpMessageHeaderAccessor headerAccessor) {
+        String wsSessionId = headerAccessor.getSessionId();
+
+        if (wsSessionId == null || wsSessionId.isBlank()) {
+            throw new IllegalStateException("No se pudo identificar la sesion WebSocket");
+        }
+
+        return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
     private void publishError(String inviteCode, String action, RuntimeException ex) {
