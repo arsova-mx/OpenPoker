@@ -55,8 +55,8 @@ public class VoteService {
         Vote vote;
 
         try {
-            vote = voteRepository.findByGameSessionAndUser(session, user).orElseGet(() -> voteRepository
-                    .saveAndFlush(Vote.builder().gameSession(session).user(user).build()));
+            vote = voteRepository.findByGameSessionAndUser(session, user)
+                    .orElseGet(() -> Vote.builder().gameSession(session).user(user).build());
         } catch (DataIntegrityViolationException ex) {
             vote = voteRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> ex);
         }

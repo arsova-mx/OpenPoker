@@ -18,6 +18,7 @@ import com.openpoker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 
 import java.util.UUID;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -121,6 +122,31 @@ public class GameSessionService {
         sessionRepository.save(session);
 
         return mapToResponse(session, user.getUsername());
+    }
+
+    public List<Participant> getParticipants(String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
+                SessionNotFoundException("Session no encontrada"));
+
+        return participantRepository.findAllByGameSession(session);
+    }
+
+    public SessionResponse leaveSession(String username, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new
+                SessionNotFoundException("Session no encontrada"));
+
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException(
+                "Usuario no encontrado"));
+
+        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() ->
+                new UsernameIsNotParticipantSessionException("No eres participante"));
+
+        participantRepository.delete(participant);
+
+        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException(
+                "Host no encontrado"));
+
+        return mapToResponse(session, host.getUsername());
     }
 
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {

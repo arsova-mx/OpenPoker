@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>OpenPoker WS Test</title>
+</head>
+<body>
+<input id="inviteCode" placeholder="inviteCode" />
+<input id="username" placeholder="username" value="Alice" />
+
+<button id="connect">Conectar</button>
+<button id="join">Join</button>
+
+<pre id="log"></pre>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+
+<script>
+    const logEl = document.getElementById("log");
+    const log = (msg) => {
+      logEl.textContent += msg + "\n";
+    };
+
+    let client = null;
+
+    document.getElementById("connect").onclick = () => {
+      const inviteCode = document.getElementById("inviteCode").value;
+
+      client = new StompJs.Client({
+        webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
+        reconnectDelay: 5000,
+        debug: (msg) => log(msg)
+      });
+
+      client.onConnect = () => {
+        log("Conectado a /ws");
+
+        client.subscribe(`/topic/session/${inviteCode}/participants`, (message) => {
+          log("Participants update:");
+          log(message.body);
+        });
+
+        log(`Suscrito a /topic/session/${inviteCode}/participants`);
+      };
+
+      client.onStompError = (frame) => {
+        log("STOMP error: " + frame.headers["message"]);
+        log(frame.body);
+      };
+
+      client.activate();
+    };
+
+    document.getElementById("join").onclick = () => {
+      const inviteCode = document.getElementById("inviteCode").value;
+      const username = document.getElementById("username").value;
+
+      client.publish({
+        destination: "/app/session.join",
+        body: JSON.stringify({
+          inviteCode,
+          username
+        })
+      });
+
+      log(`Join enviado con inviteCode=${inviteCode}, username=${username}`);
+    };
+</script>
+</body>
+</html>
