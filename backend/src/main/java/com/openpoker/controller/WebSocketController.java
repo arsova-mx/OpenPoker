@@ -1,13 +1,6 @@
 package com.openpoker.controller;
 
-import com.openpoker.dto.CastVoteRequest;
-import com.openpoker.dto.WebSocketJoinSessionRequest;
-import com.openpoker.dto.WebSocketLeaveSessionRequest;
-import com.openpoker.dto.WebSocketParticipantResponse;
-import com.openpoker.entity.Participant;
-import com.openpoker.service.GameSessionService;
-import com.openpoker.service.VoteService;
-import com.openpoker.service.WebSocketSessionRegistry;
+import com.openpoker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -24,18 +17,25 @@ public class WebSocketController {
     private final VoteService voteService;
     private final SimpMessagingTemplate messagingTemplate;
     private final WebSocketSessionRegistry sessionRegistry;
+    private final GameSessionRepository sessionRepository;
+    private final ParticipantRepository participantRepository;
+    private final UserRepository userRepository;
 
     @MessageMapping("/session.join")
     public void join(WebSocketJoinSessionRequest payload, SimpMessageHeaderAccessor headerAccessor) {
         try {
             service.joinSession(payload.username(), payload.inviteCode());
 
-            sessionRegistry.register(headerAccessor.getSessionId(), payload.username(), payload.inviteCode());
+            var session = sessionRepository.findBySessionCode(payload.inviteCode()).orElseThrow();
+            var participant = participantRepository.findByGameSessionAndUser(session, userRepository.findByUsername(payload.username()).orElseThrow()).orElseThrow();
+
+            sessionRegistry.register(headerAccessor.getSessionId(), session.getId(), participant.getId());
 
             List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(payload.inviteCode()));
 
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/state", service.getSessionByCode(payload.inviteCode()));
+            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(session.getId()));
         } catch (RuntimeException ex) {
             publishError(payload.inviteCode(), "session.join", ex);
         }
@@ -52,6 +52,7 @@ public class WebSocketController {
 
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/state", service.getSessionByCode(payload.inviteCode()));
+            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(payload.inviteCode()));
         } catch (RuntimeException ex) {
             publishError(payload.inviteCode(), "session.leave", ex);
         }
@@ -64,13 +65,13 @@ public class WebSocketController {
 
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionInfo.inviteCode();
-            String username = sessionInfo.username();
+            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            voteService.castVote(username, inviteCode, new CastVoteRequest(cardValue));
+            voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(inviteCode, username));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(inviteCode, getUsernameFromParticipant(sessionInfo.participantId())));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.vote", ex);
         }
@@ -82,11 +83,11 @@ public class WebSocketController {
 
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionInfo.inviteCode();
-            String username = sessionInfo.username();
+            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.revealVotes(username, inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.revealVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reveal", ex);
         }
@@ -98,15 +99,12 @@ public class WebSocketController {
 
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionInfo.inviteCode();
-            String username = sessionInfo.username();
-            var sessionState = service.getSessionByCode(inviteCode);
-            String resolvedInviteCode = sessionState.sessionCode();
+            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            voteService.resetVotes(username, sessionState.id());
-
-            messagingTemplate.convertAndSend("/topic/session/" + resolvedInviteCode + "/votes", voteService.getVotes(resolvedInviteCode, username));
-            messagingTemplate.convertAndSend("/topic/session/" + resolvedInviteCode + "/state", service.getSessionByCode(resolvedInviteCode));
+            voteService.resetVotes(sessionInfo.sessionId(), sessionInfo.participantId());
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reset-votes", ex);
         }
@@ -144,13 +142,7 @@ public class WebSocketController {
         return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
-    private void publishError(String inviteCode, String action, RuntimeException ex) {
-        if (inviteCode == null || inviteCode.isBlank()) {
-            return;
-        }
-
-        Object errorPayload = Map.of("action", action, "type", ex.getClass().getSimpleName(), "message", ex.getMessage());
-
-        messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", errorPayload);
+    private String getUsernameFromParticipant(UUID participantId) {
+        return participantRepository.findById(participantId).orElseThrow().getUser().getUsername();
     }
 }

@@ -81,6 +81,9 @@
                     stompClient.subscribe('/topic/session/' + code + '/votes', function (message) {
                         log('RECEIVED votes: ' + message.body, 'msg');
                     });
+                    stompClient.subscribe('/topic/session/' + code + '/vote-status', function (message) {
+                        log('RECEIVED vote-status: ' + message.body, 'msg');
+                    });
                     stompClient.subscribe('/topic/session/' + code + '/state', function (message) {
                         try {
                             lastSessionState = JSON.parse(message.body);
@@ -104,6 +107,7 @@
                     });
                     log('Subscribed to /topic/session/' + code + '/participants', 'connected');
                     log('Subscribed to /topic/session/' + code + '/votes', 'connected');
+                    log('Subscribed to /topic/session/' + code + '/vote-status', 'connected');
                     log('Subscribed to /topic/session/' + code + '/state', 'connected');
                     log('Subscribed to /topic/session/' + code + '/errors', 'connected');
                 }

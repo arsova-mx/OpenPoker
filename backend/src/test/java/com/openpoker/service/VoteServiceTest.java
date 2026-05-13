@@ -182,6 +182,7 @@ class VoteServiceTest {
     @Test
     void resetVotes_deletesCurrentRoundVotesAndMovesSessionToVoting() {
         UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
         session.setId(sessionId);
         session.setStatus(SessionStatus.REVEALED);
         session.setVotesRevealed(true);
@@ -190,10 +191,10 @@ class VoteServiceTest {
         when(sessionRepository.save(session)).thenReturn(session);
 
         participant.setRole(Participant.Role.HOST);
-        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
-        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        participant.setId(participantId);
+        when(participantRepository.findById(participantId)).thenReturn(Optional.of(participant));
 
-        service.resetVotes("user", sessionId);
+        service.resetVotes(sessionId, participantId);
 
         verify(voteRepository).deleteAllByGameSession(session);
         verify(sessionRepository).save(session);
@@ -204,16 +205,17 @@ class VoteServiceTest {
     @Test
     void resetVotes_rejectsWhenUserIsNotHost() {
         UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
         session.setId(sessionId);
         session.setStatus(SessionStatus.REVEALED);
         session.setVotesRevealed(true);
 
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
-        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
-        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        participant.setId(participantId);
+        when(participantRepository.findById(participantId)).thenReturn(Optional.of(participant));
 
         InsufficientRoleException ex = assertThrows(InsufficientRoleException.class,
-                () -> service.resetVotes("user", sessionId));
+                () -> service.resetVotes(sessionId, participantId));
 
         assertEquals("Solo el host puede reiniciar la votacion", ex.getMessage());
     }

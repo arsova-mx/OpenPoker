@@ -59,6 +59,7 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
+        when(voteService.getVoteStatus("ABC123")).thenReturn(Map.of());
 
         webSocketController.join(new WebSocketJoinSessionRequest("ABC123", "alice"), headerAccessor);
 
@@ -66,8 +67,9 @@ class WebSocketTest {
         verify(sessionService).getParticipants("ABC123");
         verify(sessionService).getSessionByCode("ABC123");
         verify(sessionRegistry).register("ws-session-1", "alice", "ABC123");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", expected);
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", (Object) expected);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
     @Test
@@ -80,6 +82,7 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
+        when(voteService.getVoteStatus("ABC123")).thenReturn(Map.of());
 
         webSocketController.leave(new WebSocketLeaveSessionRequest("ABC123", "alice"), headerAccessor);
 
@@ -87,45 +90,58 @@ class WebSocketTest {
         verify(sessionService).getParticipants("ABC123");
         verify(sessionService).getSessionByCode("ABC123");
         verify(sessionRegistry).unregister("ws-session-1");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", expected);
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", (Object) expected);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
     @Test
     void vote_broadcastsVotesAndState() {
+        UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
         VotingResultsResponse votingResults = new VotingResultsResponse("ABC123", List.of(), false);
         SessionResponse sessionResponse = buildSessionResponse("ABC123", "WAITING", 2L);
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo("alice", "ABC123")));
-        when(voteService.getVotes("ABC123", "alice")).thenReturn(votingResults);
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
+        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
 
         webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "5"), headerAccessor);
 
-        verify(voteService).castVote("alice", "ABC123", new com.openpoker.dto.CastVoteRequest("5"));
-        verify(voteService).getVotes("ABC123", "alice");
+        verify(voteService).submitVote(sessionId, participantId, "5");
+        verify(voteService).getVotes(sessionId, participantId);
+        verify(voteService).getVoteStatus(sessionId);
         verify(sessionService).getSessionByCode("ABC123");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", votingResults);
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
     @Test
     void reveal_broadcastsRevealedVotesAndState() {
+        UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
         VotingResultsResponse votingResults = new VotingResultsResponse("ABC123", List.of(), true);
         SessionResponse sessionResponse = buildSessionResponse("ABC123", "REVEALED", 2L);
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo("host", "ABC123")));
-        when(voteService.revealVotes("host", "ABC123")).thenReturn(votingResults);
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(voteService.revealVotes(sessionId, participantId)).thenReturn(votingResults);
+        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
 
         webSocketController.reveal(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
 
-        verify(voteService).revealVotes("host", "ABC123");
+        verify(voteService).revealVotes(sessionId, participantId);
+        verify(voteService).getVoteStatus(sessionId);
         verify(sessionService).getSessionByCode("ABC123");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", votingResults);
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
     @Test
@@ -156,9 +172,11 @@ class WebSocketTest {
                 "VOTING", 2L, new Timestamp(System.currentTimeMillis()));
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo("host", "ABC123")));
-        when(voteService.getVotes("ABC123", "host")).thenReturn(votingResults);
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
+        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
 
         webSocketController.resetVotes(Map.of(
                 "inviteCode", "OTHER",
@@ -166,11 +184,13 @@ class WebSocketTest {
                 "sessionId", UUID.randomUUID().toString()
         ), headerAccessor);
 
-        verify(voteService).resetVotes("host", sessionId);
-        verify(voteService).getVotes("ABC123", "host");
-        verify(sessionService, times(2)).getSessionByCode("ABC123");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", votingResults);
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(voteService).resetVotes(sessionId, participantId);
+        verify(voteService).getVotes(sessionId, participantId);
+        verify(voteService).getVoteStatus(sessionId);
+        verify(sessionService).getSessionByCode("ABC123");
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
     @Test
@@ -184,8 +204,8 @@ class WebSocketTest {
         webSocketController.finish(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
 
         verify(sessionService).finishSession("host", "ABC123");
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", List.of());
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", sessionResponse);
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", (Object) List.of());
+        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
     }
 
     private Participant buildParticipant(String username, Participant.Role role) {
