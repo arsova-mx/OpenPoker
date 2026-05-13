@@ -15,17 +15,17 @@ export default function Root() {
             return;
         }
 
-        if(token ==='EXPIRED') {
-            submit(null, {action:"/auth/logout", method:"post" });
+        if(token === null) {
             logout();
+            submit(null, {action:"/auth/logout", method:"post" });
             return;
         }
 
         const timeRemaining = getTokenDuration();
-        
+
         const timer = setTimeout( () => {
-            submit(null, {action:"/auth/logout", method:"post" });
             logout();
+            submit(null, {action:"/auth/logout", method:"post" });
         }, timeRemaining);
 
         return () => clearTimeout(timer);

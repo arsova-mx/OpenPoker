@@ -55,6 +55,5 @@ export default function Auth() {
 }
 
 export async function action() {
-    
     return redirect("/");
 }

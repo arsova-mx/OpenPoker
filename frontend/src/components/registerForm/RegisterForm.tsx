@@ -1,60 +1,56 @@
 import { Link, useSubmit } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { authService } from "@/services/authService";
-import  * as z from 'zod'
+import * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAuthStore from "@/store/authStore";
-import { Input } from "@/components/ui/input-ref";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 
-import { toast } from "sonner";
 import { Field, FieldError, FieldLabel } from "../ui/field";
+import { PasswordInput } from "../ui/PasswordInput";
 
 
 const registerSchema = z.object({
         username: z
             .string()
-            .min(1, "Ingrese un Nombre de usuario"),
+            .min(1, "Ingrese un nombre de usuario")
+            .trim(),
         email: z
-            .email("Ingrese un email válido"),
+            .email("Ingrese un email válido")
+            .trim(),
         password: z
             .string()
-            .min(6, "La contraseña debe tener al menos 6 caracteres"),
+            .min(6, "La contraseña debe tener al menos 6 caracteres")
+            .trim(),
         confirmPassword: z
             .string()
-            .min(6, "La contraseña debe tener al menos 6 caracteres"),
+            .min(6, "La contraseña debe tener al menos 6 caracteres")
+            .trim(),
     }).refine( (data) => data.password === data.confirmPassword, { 
     message: "Las contraseñas no coinciden",
     path: ["confirmPassword"],
 });
 
 export default function RegisterForm() {
+
     const authRegister = authService.register;
     const submit = useSubmit();
     const login = authService.login;
     const setToken = authService.saveToken
-    const setTokenState = useAuthStore( (state) => state.setToken);
-    const loginState = useAuthStore( (state) => state.login);
-
-    // const { 
-    //     register, handleSubmit, formState: {errors}
-    // } = useForm<registerFormData>({
-    //     resolver: zodResolver(registerSchema),
-    //     mode: "onTouched"
-    // }) 
-
-    
+    const loginState = useAuthStore( (state) => state.login);  
 
     const form = useForm<z.infer<typeof registerSchema>>({
             resolver: zodResolver(registerSchema),
-            mode: "onTouched",
+            mode: "all",
             defaultValues: {
                 username: "",
                 email: "",
                 password: "",
+                confirmPassword: "",
             },
-      });
+    });
+
     async function onSubmit(data: z.infer<typeof registerSchema>) {
 
         const dataForm = {
@@ -69,16 +65,14 @@ export default function RegisterForm() {
             login(loginForm);
 
             const token = response.token;
-            setToken(token);
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
             
-            setTokenState(token, tokenDuration);
-            loginState(data.username, data.password);
+            setToken(token);
+            loginState(data.username, token, tokenDuration);
 
             submit(null, { action:'/auth', method: 'post'});
         }
     }
-
 
     return(
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -137,10 +131,11 @@ export default function RegisterForm() {
                     name= "password"
                     control= {form.control}
                     render={( ({field, fieldState}) => (
-                        <>
-                            <Label htmlFor="password">Contraseña</Label>
-                            <Input 
-                                type="password" 
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="password">
+                                Contraseña
+                            </FieldLabel >
+                            <PasswordInput 
                                 {...field} 
                                 id="password"
                                 placeholder="Contraseña"
@@ -149,7 +144,7 @@ export default function RegisterForm() {
                             {fieldState.invalid && (
                                 <FieldError errors={[fieldState.error]} />
                             )}
-                        </>
+                        </Field>
                     ))
                     }
                 />
@@ -160,19 +155,18 @@ export default function RegisterForm() {
                     name= "confirmPassword"
                     control= {form.control}
                     render={( ({field, fieldState}) => (
-                        <>
-                            <Label htmlFor="confirmPassword">Contraseña</Label>
-                            <Input 
-                                type="password" 
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel htmlFor="confirmPassword">Confirmar contraseña</FieldLabel>
+                            <PasswordInput 
                                 {...field} 
-                                id="confirmPassword"
-                                placeholder="Contraseña"
+                                id="password"
+                                placeholder="Repite la contraseña"
                                 aria-invalid={fieldState.invalid}
                             />
                             {fieldState.invalid && (
                                 <FieldError errors={[fieldState.error]} />
                             )}
-                        </>
+                        </Field>
                     ))
                     }
                 />

@@ -3,21 +3,19 @@ import { useForm, Controller } from "react-hook-form"
 import useAuthStore from "@/store/authStore"
 import { authService } from "@/services/authService";
 import { Link, useSubmit } from "react-router-dom";
-import { Input } from "@/components/ui/input-ref";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 
-import { toast } from "sonner";
 import * as z from "zod"
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Field, FieldError, FieldLabel } from "../ui/field";
+import { PasswordInput } from "../ui/PasswordInput";
 
 
 export default function LoginForm() {
     const submit = useSubmit()
     
     const loginState = useAuthStore( (state) => state.login);
-    const setTokenState = useAuthStore( (state) => state.setToken)
 
     const login = authService.login;
     const setToken = authService.saveToken;
@@ -38,23 +36,22 @@ export default function LoginForm() {
             username: "",
             password: "",
         },
-  });
+    });
 
     async function onSubmit(data: z.infer<typeof formSchema>) {
 
-    const response = await login(data);
-    console.log(response);
+        const response = await login(data);
 
         if(response.token !== null) {
             const token = response.token;
             setToken(token);
+            
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
             
-            setTokenState(token, tokenDuration);
-            loginState(data.username, data.password);
+            loginState(data.username, token, tokenDuration);
             submit(null, {action:"/auth",method: 'post'});
         }
-  }
+    }
 
     return (
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -88,10 +85,9 @@ export default function LoginForm() {
                     name= "password"
                     control= {form.control}
                     render={( ({field, fieldState}) => (
-                        <>
-                            <Label htmlFor="password">Contraseña</Label>
-                            <Input 
-                                type="password" 
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                            <PasswordInput 
                                 {...field} 
                                 id="password"
                                 placeholder="Contraseña"
@@ -100,7 +96,7 @@ export default function LoginForm() {
                             {fieldState.invalid && (
                                 <FieldError errors={[fieldState.error]} />
                             )}
-                        </>
+                        </Field>
                     ))
                     }
                 />

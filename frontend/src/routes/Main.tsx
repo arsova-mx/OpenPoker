@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { RiGroupLine, RiSendPlaneLine, RiBarChartBoxLine, RiLogoutBoxLine } from "@remixicon/react";
 
+
 function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode; step: number; title: string; description: string }) {
     return (
         <div className="flex flex-col items-center gap-2 text-center">
@@ -20,12 +21,14 @@ function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode
 }
 
 export default function Main() {
+    
     const submit = useSubmit()
     const username = useAuthStore( (state) => state.username)
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const tokenDuration = useAuthStore( (state) => state.tokenDuration)
-
+    const logout = useAuthStore( (state) => state.logout)
     function handleLogout() {
+        logout();
         submit(null, {action:"/auth/logout", method:"post" });
     }
 
