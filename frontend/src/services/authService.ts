@@ -5,11 +5,8 @@ import axios from "axios";
 
 const login = async (data: LoginRequest): Promise<AuthResponse> => {
     try {
-        const response = await instance.post<AuthResponse>('/auth/login', data)
-        localStorage.setItem('token', response.data.token);
-        
+        const response = await instance.post<AuthResponse>('/auth/login', data);
         return response.data;
-        
     } catch (error) {
         if (axios.isAxiosError(error)){
             const serverMessage = error.response?.data
@@ -22,7 +19,7 @@ const login = async (data: LoginRequest): Promise<AuthResponse> => {
 
 const register = async (data: RegisterRequest): Promise<AuthResponse> => {
     try {
-        const response = await instance.post<AuthResponse>('/auth/register', data)
+        const response = await instance.post<AuthResponse>('/auth/register', data);
         return response.data
     } catch (error) {
         if (axios.isAxiosError(error)){

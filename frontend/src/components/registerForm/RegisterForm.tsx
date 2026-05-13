@@ -1,39 +1,58 @@
 import { Link, useSubmit } from "react-router-dom";
-import { useForm, SubmitHandler } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { authService } from "@/services/authService";
-import  * as z from 'zod'
+import * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAuthStore from "@/store/authStore";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+
+import { Field, FieldError, FieldLabel } from "../ui/field";
+import { PasswordInput } from "../ui/PasswordInput";
+
 
 const registerSchema = z.object({
-    username: z.string().min(3, "El nombre de usuario debe tener al menos 3 caracteres"),
-    email: z.email("Email invalido"),
-    password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-    confirmPassword: z.string().min(6, "La contraseña debe tener al menos 6 caracteres")
-}).refine( (data) => data.password === data.confirmPassword, { 
+        username: z
+            .string()
+            .min(1, "Ingrese un nombre de usuario")
+            .trim(),
+        email: z
+            .email("Ingrese un email válido")
+            .trim(),
+        password: z
+            .string()
+            .min(6, "La contraseña debe tener al menos 6 caracteres")
+            .trim(),
+        confirmPassword: z
+            .string()
+            .min(6, "La contraseña debe tener al menos 6 caracteres")
+            .trim(),
+    }).refine( (data) => data.password === data.confirmPassword, { 
     message: "Las contraseñas no coinciden",
     path: ["confirmPassword"],
 });
 
-type registerFormData = z.infer<typeof registerSchema>
-
 export default function RegisterForm() {
+
     const authRegister = authService.register;
     const submit = useSubmit();
     const login = authService.login;
-    const setToken =authService.saveToken
-    const setTokenState = useAuthStore( (state) => state.setToken);
-    const loginState = useAuthStore( (state) => state.login);
+    const setToken = authService.saveToken
+    const loginState = useAuthStore( (state) => state.login);  
 
-    const { 
-        register, handleSubmit, formState: {errors}
-    } = useForm<registerFormData>({
-        resolver: zodResolver(registerSchema),
-        mode: "onTouched"
-    }) 
-    
-    
-    const onSubmit: SubmitHandler<registerFormData> = async(data) => {
+    const form = useForm<z.infer<typeof registerSchema>>({
+            resolver: zodResolver(registerSchema),
+            mode: "all",
+            defaultValues: {
+                username: "",
+                email: "",
+                password: "",
+                confirmPassword: "",
+            },
+    });
+
+    async function onSubmit(data: z.infer<typeof registerSchema>) {
+
         const dataForm = {
             username: data.username, 
             email: data.email, 
@@ -41,94 +60,128 @@ export default function RegisterForm() {
         }
         const response = await authRegister(dataForm);
 
-        if(!response.token !== null) {
+        if(response.token !== null) {
             const loginForm = { username: data.username, password: data.password}
             login(loginForm);
 
             const token = response.token;
-            setToken(token);
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
             
-            setTokenState(token, tokenDuration);
-            loginState(data.username, data.password);
+            setToken(token);
+            loginState(data.username, token, tokenDuration);
 
             submit(null, { action:'/auth', method: 'post'});
         }
-        
-        
     }
 
     return(
-        <div className="">
-            <form onSubmit={handleSubmit(onSubmit)} className="grid flex justify-center">
-                <label htmlFor="email">Correo:</label>
-                <input type="email" 
-                    {
-                        ...register(
-                            "email",
-                            {
-                                required: "Email requerido",
-                            }
-                        )
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+                <Controller
+                    name="email"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="email">
+                                Correo electronico
+                            </FieldLabel >
+                            <Input 
+                                type="email"
+                                {...field} 
+                                id="email"
+                                placeholder="Correo electronico"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
                     }
-                    className="rounded-2xl border bg-white"
-                    id='email' 
-                    placeholder='Correo'
                 />
-                {errors.email ? <span className="text-red-800">{errors.email.message}</span> : <br />}
+            </div>
 
-                <label htmlFor="username">Nombre de usuario:</label>
-                <input type="text" 
-                    {...register(
-                        "username", 
-                        {   
-                            required: "Nombre de usuario requerido",
-                        }
-                    )} 
-                    id="username"
-                    className="rounded-2xl border bg-white"
-                    placeholder="Nombre de usuario"
+            <div className="flex flex-col gap-2">
+                <Controller 
+                    name= "username"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="username">
+                                Usuario
+                            </FieldLabel >
+                            <Input 
+                                type="text"
+                                {...field} 
+                                id="username"
+                                placeholder="Nombre de usuario"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
-                {errors.username ? <span className="text-red-800">{errors.username.message}</span> : <br />}
+            </div>
 
-                <label htmlFor="password"> Contraseña:</label>
-                <input type="password" 
-                    {...register(
-                        "password", 
-                        {
-                            required: "Contraseña requerida",
-                        }
-                    )}
-                    id="username"
-                    placeholder="Contraseña" 
-                    className="border rounded-2xl bg-white"
+            <div className="flex flex-col gap-2">
+                <Controller 
+                    name= "password"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="password">
+                                Contraseña
+                            </FieldLabel >
+                            <PasswordInput 
+                                {...field} 
+                                id="password"
+                                placeholder="Contraseña"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
-                {errors.password ? <span className="text-red-800">{errors.password.message}</span> : <br />}
+            </div>
 
-                <label htmlFor="confirmPassword"> Repita la contraseña:</label>
-                <input type="password" 
-                    {...register(
-                        "confirmPassword", 
-                        {
-                            required: "Repita la contraseña",
-                        }
-                    )}
-                    id="username" 
-                    placeholder="Contraseña"
-                    className="border rounded-2xl bg-white"
+            <div className="flex flex-col gap-2">
+                <Controller 
+                    name= "confirmPassword"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel htmlFor="confirmPassword">Confirmar contraseña</FieldLabel>
+                            <PasswordInput 
+                                {...field} 
+                                id="password"
+                                placeholder="Repite la contraseña"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
-                {errors.confirmPassword ? <span className="text-red-800">{errors.confirmPassword.message}</span> : <br />}
-                <p className="text-center">¿Ya tienes cuenta? <Link to='/auth/login' className="hover:underline">
+            </div>
+
+            <Button type="submit" className="w-full mt-2">
+                Crear cuenta
+            </Button>
+
+            <p className="text-center text-sm text-muted-foreground">
+                ¿Ya tienes cuenta?{" "}
+                <Link to="/auth/login" className="text-primary font-medium hover:underline">
                     Iniciar sesión
-                    </Link>
-                </p>
-
-                <button type="submit" className="border rounded-2xl bg-emerald-700 text-white px-10 hover:cursor-pointer"
-                >
-                    Crear cuenta
-                </button>
-            </form>
-        </div>
-        
+                </Link>
+            </p>
+        </form>
     );
 }

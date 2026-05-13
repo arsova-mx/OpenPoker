@@ -1,95 +1,119 @@
 
-import { useForm, SubmitHandler } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import useAuthStore from "@/store/authStore"
 import { authService } from "@/services/authService";
-import {  Link, useSubmit } from "react-router-dom";
+import { Link, useSubmit } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
-type formLogin = {
-    username: string,
-    password: string
-}
+import * as z from "zod"
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Field, FieldError, FieldLabel } from "../ui/field";
+import { PasswordInput } from "../ui/PasswordInput";
+
 
 export default function LoginForm() {
     const submit = useSubmit()
     
     const loginState = useAuthStore( (state) => state.login);
-    const setTokenState = useAuthStore( (state) => state.setToken)
 
     const login = authService.login;
     const setToken = authService.saveToken;
    
-    
-    const {
-        register, handleSubmit, formState: {errors}
-    } = useForm<formLogin>()
+    const formSchema = z.object({
+    username: z
+        .string()
+        .min(1, "Ingrese un Nombre de usuario"),
+    password: z
+        .string()
+        .min(6, "La contraseña debe tener al menos 6 caracteres"),
+    })
 
-    const onSubmit: SubmitHandler<formLogin> = async (data) => {
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        mode: "onTouched",
+        defaultValues: {
+            username: "",
+            password: "",
+        },
+    });
+
+    async function onSubmit(data: z.infer<typeof formSchema>) {
+
         const response = await login(data);
 
         if(response.token !== null) {
             const token = response.token;
             setToken(token);
+            
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
             
-            setTokenState(token, tokenDuration);
-            loginState(data.username, data.password);
-            
+            loginState(data.username, token, tokenDuration);
+            submit(null, {action:"/auth",method: 'post'});
         }
-        submit(null, {action:"/auth",method: 'post'});
     }
 
-
     return (
-        <div className="flex justify-center">
-            
-            <form onSubmit={handleSubmit(onSubmit)} className="flex justify-center flex-col">
-                <label htmlFor="username">Usuario</label>
-                <input type="text" 
-                    {...register(
-                        "username", 
-                        {   
-                            required: "Nombre de usuario requerido",
-                        }
-                    )} 
-                    id="username"
-                    className="rounded-2xl border bg-white"
-                    placeholder="Nombre de usuario"
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+                <Controller 
+                    name= "username"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel  htmlFor="username">
+                                Usuario
+                            </FieldLabel >
+                            <Input 
+                                type="text"
+                                {...field} 
+                                id="username"
+                                placeholder="Nombre de usuario"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
-                {errors.username ? <span className="text-red-800">{errors.username.message}</span> : <br />}
-                
-                <label htmlFor="password">Contraseña</label>
-                <input type="password" 
-                    {...register(
-                        "password", 
-                        {
-                            required: "Contraseña requerida",
-                            minLength: {
-                                value: 6,
-                                message: "La contraseña debe tener al menos 6 caracteres"
-                            }
-                        }
-                    )}
-                    id="password" 
-                    placeholder="Contraseña"
-                    className="border rounded-2xl bg-white"
+            </div>
+
+            <div className="flex flex-col gap-2">
+                <Controller 
+                    name= "password"
+                    control= {form.control}
+                    render={( ({field, fieldState}) => (
+                        <Field data-invalid={fieldState.invalid}>
+                            <FieldLabel htmlFor="password">Contraseña</FieldLabel>
+                            <PasswordInput 
+                                {...field} 
+                                id="password"
+                                placeholder="Contraseña"
+                                aria-invalid={fieldState.invalid}
+                            />
+                            {fieldState.invalid && (
+                                <FieldError errors={[fieldState.error]} />
+                            )}
+                        </Field>
+                    ))
+                    }
                 />
                 
-                {errors.password ? <span className="text-red-800">{errors.password.message}</span> : <br />}
-                <p className="text-center">¿No tienes cuenta? <Link to='/auth/register' className="hover:underline">Registrate</Link></p>
-                
+            </div>
 
-                <button type="submit" 
-                className="border rounded-2xl bg-emerald-700 text-white px-10 hover:cursor-pointer "
-                >
-                    Iniciar Sesion
-                </button>
+            <Button type="submit" className="w-full mt-2">
+                Iniciar Sesión
+            </Button>
 
-            </form>
-        </div>
+            <p className="text-center text-sm text-muted-foreground">
+                ¿No tienes cuenta?{" "}
+                <Link to="/auth/register" className="text-primary font-medium hover:underline">
+                    Regístrate
+                </Link>
+            </p>
+        </form>
     )
 }
-
-
-
-
 

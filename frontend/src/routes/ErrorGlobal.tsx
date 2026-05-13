@@ -2,6 +2,8 @@
 import { useEffect } from "react";
 import { Link, useRouteError, isRouteErrorResponse } from "react-router-dom";
 import { toast } from "sonner";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 function ErrorGlobal() {
   
@@ -25,34 +27,35 @@ function ErrorGlobal() {
     }, [errorMessage]);
 
     return(
-        <div className="p-40 text-center ">
-        
-      <h1>Algo salió mal</h1>
-      <p>Lo sentimos, ha ocurrido un error inesperado.</p>
-      <br/>
-      <div className="bg-emerald-200 p-64 rounded-lg inline-block hover:shadow-xl/50">
-        
-        {isRouteErrorResponse(error) ? (
-          <p>
-            <strong>Status:</strong> {error.status} <br />
-            <strong> {error.statusText || error.data?.message}</strong>
-          </p>
-        ) : (
-          <p>
-            <strong>Error:</strong> {errorMessage}
-          </p>
-        )}
-      </div>
-
-      <div className="pt-10">
-        <Link to="/" className="hover:bg-emerald-900 hover:text-gray-50 p-2 rounded-lg"> 
-            Volver al Inicio
-        </Link>
-            
-         
-        
-      </div>
-    </div>
+        <div className="flex min-h-dvh items-center justify-center bg-background p-6">
+            <Card className="w-full max-w-md text-center">
+                <CardHeader>
+                    <CardTitle className="text-2xl font-heading">Algo salió mal</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                    <p className="text-sm text-muted-foreground">
+                        Lo sentimos, ha ocurrido un error inesperado.
+                    </p>
+                    <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
+                        {isRouteErrorResponse(error) ? (
+                            <p>
+                                <strong>Status:</strong> {error.status} <br />
+                                <strong>{error.statusText || error.data?.message}</strong>
+                            </p>
+                        ) : (
+                            <p>
+                                <strong>Error:</strong> {errorMessage}
+                            </p>
+                        )}
+                    </div>
+                </CardContent>
+                <CardFooter className="justify-center">
+                    <Button asChild variant="outline">
+                        <Link to="/">Volver al Inicio</Link>
+                    </Button>
+                </CardFooter>
+            </Card>
+        </div>
     )
 }
 

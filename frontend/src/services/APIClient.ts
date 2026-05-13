@@ -10,7 +10,6 @@
 
 
 import axios from "axios";
-import { authService } from "./authService";
 import { toast } from "sonner";
 
 const API_URL = 'http://localhost:8080/api';
@@ -25,8 +24,8 @@ export const instance = axios.create({
 
 instance.interceptors.request.use(
     (config) => {
-        const getToken = authService.getToken;
-        config.headers.Authorization = `Bearer ${getToken()}`
+        const token = localStorage.getItem('token');
+        config.headers.Authorization = `Bearer ${token}`
         return config
     },
     (error) => {
