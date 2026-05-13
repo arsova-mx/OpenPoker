@@ -15,12 +15,6 @@ export default function Root() {
             return;
         }
 
-        if(token === null) {
-            logout();
-            submit(null, {action:"/auth/logout", method:"post" });
-            return;
-        }
-
         const timeRemaining = getTokenDuration();
 
         const timer = setTimeout( () => {

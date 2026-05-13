@@ -1,5 +1,6 @@
 import { Link, useSubmit } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
+import { useState } from "react";
 import { authService } from "@/services/authService";
 import * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -36,9 +37,9 @@ export default function RegisterForm() {
 
     const authRegister = authService.register;
     const submit = useSubmit();
-    const login = authService.login;
     const setToken = authService.saveToken
-    const loginState = useAuthStore( (state) => state.login);  
+    const loginState = useAuthStore( (state) => state.login);
+    const [serverError, setServerError] = useState<string | null>(null);
 
     const form = useForm<z.infer<typeof registerSchema>>({
             resolver: zodResolver(registerSchema),
@@ -52,30 +53,35 @@ export default function RegisterForm() {
     });
 
     async function onSubmit(data: z.infer<typeof registerSchema>) {
-
-        const dataForm = {
-            username: data.username, 
-            email: data.email, 
-            password: data.password
-        }
-        const response = await authRegister(dataForm);
-
-        if(response.token !== null) {
-            const loginForm = { username: data.username, password: data.password}
-            login(loginForm);
+        setServerError(null);
+        try {
+            const dataForm = {
+                username: data.username, 
+                email: data.email, 
+                password: data.password
+            }
+            const response = await authRegister(dataForm);
 
             const token = response.token;
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
-            
+
             setToken(token);
             loginState(data.username, token, tokenDuration);
 
             submit(null, { action:'/auth', method: 'post'});
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "El usuario ya existe";
+            setServerError(message);
         }
     }
 
     return(
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            {serverError && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {serverError}
+                </p>
+            )}
             <div className="flex flex-col gap-2">
                 <Controller
                     name="email"
