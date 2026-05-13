@@ -70,7 +70,7 @@ export default function RegisterForm() {
 
             submit(null, { action:'/auth', method: 'post'});
         } catch (error) {
-            const message = error instanceof Error ? error.message : "El usuario ya existe";
+            const message = error instanceof Error ? error.message : "Error al registrar usuario";
             setServerError(message);
         }
     }

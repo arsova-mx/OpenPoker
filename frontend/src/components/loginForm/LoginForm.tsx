@@ -55,7 +55,7 @@ export default function LoginForm() {
                 submit(null, {action:"/auth",method: 'post'});
             }
         } catch (error) {
-            const message = error instanceof Error ? error.message : "Credenciales inválidas";
+            const message = error instanceof Error ? error.message : "Error al iniciar sesión";
             setServerError(message);
         }
     }
