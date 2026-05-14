@@ -53,18 +53,20 @@ public class VoteService {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        Vote vote;
-
-        try {
-            vote = voteRepository.findByGameSessionAndUser(session, participant.getUser())
-                    .orElseGet(() -> Vote.builder().gameSession(session).user(participant.getUser()).build());
-        } catch (DataIntegrityViolationException ex) {
-            vote = voteRepository.findByGameSessionAndUser(session, participant.getUser()).orElseThrow(() -> ex);
-        }
+        Vote vote = voteRepository.findByGameSessionAndUser(session, participant.getUser())
+                .orElseGet(() -> Vote.builder().gameSession(session).user(participant.getUser()).build());
 
         vote.setCardValue(value);
 
-        Vote savedVote = voteRepository.save(vote);
+        Vote savedVote;
+
+        try {
+            savedVote = voteRepository.saveAndFlush(vote);
+        } catch (DataIntegrityViolationException ex) {
+            vote = voteRepository.findByGameSessionAndUser(session, participant.getUser()).orElseThrow(() -> ex);
+            vote.setCardValue(value);
+            savedVote = voteRepository.saveAndFlush(vote);
+        }
 
         long participantCount = participantRepository.countByGameSession(session);
         long voteCount = voteRepository.findAllByGameSession(session).size();

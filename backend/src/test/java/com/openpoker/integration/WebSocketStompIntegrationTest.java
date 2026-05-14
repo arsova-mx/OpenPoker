@@ -1,12 +1,10 @@
 package com.openpoker.integration;
 
+import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
-import com.openpoker.dto.WebSocketJoinSessionRequest;
 import com.openpoker.entity.DeckValue;
-import com.openpoker.entity.GameSession;
-import com.openpoker.entity.SessionStatus;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 import com.openpoker.entity.VotingDeck;
@@ -15,6 +13,8 @@ import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
 import com.openpoker.repository.VotingDeckRepository;
+import com.openpoker.security.JwtService;
+import com.openpoker.service.GameSessionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +28,7 @@ import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
@@ -56,8 +57,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 })
 class WebSocketStompIntegrationTest {
 
-    private static final String INVITE_CODE = "ROOM42";
-
     @LocalServerPort
     private int port;
 
@@ -76,16 +75,22 @@ class WebSocketStompIntegrationTest {
     @Autowired
     private VoteRepository voteRepository;
 
+    @Autowired
+    private GameSessionService gameSessionService;
+
+    @Autowired
+    private JwtService jwtService;
+
     private final WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
 
     @BeforeEach
     @AfterEach
     void cleanup() {
-        voteRepository.deleteAll();
-        participantRepository.deleteAll();
-        sessionRepository.deleteAll();
+        voteRepository.deleteAllInBatch();
+        participantRepository.deleteAllInBatch();
+        sessionRepository.deleteAllInBatch();
         deckRepository.deleteAll();
-        userRepository.deleteAll();
+        userRepository.deleteAllInBatch();
     }
 
     @Test
@@ -94,28 +99,27 @@ class WebSocketStompIntegrationTest {
 
         User host = userRepository.save(buildUser("host", "host@example.com", UserRole.HOST));
         User alice = userRepository.save(buildUser("alice", "alice@example.com", UserRole.VOTER));
-        deckRepository.save(buildDeck());
-        sessionRepository.save(GameSession.builder()
-                .sessionCode(INVITE_CODE)
-                .name("Sprint Planning")
-                .hostUserId(host.getId())
-                .status(SessionStatus.VOTING)
-                .deck(deckRepository.findByName("Fibonacci").orElseThrow())
-                .build());
+        VotingDeck deck = deckRepository.save(buildDeck());
+
+        SessionResponse created = gameSessionService.createSession("host", new CreateSessionRequest("Sprint Planning"), deck.getId());
+        String inviteCode = created.sessionCode();
+
+        String hostToken = jwtService.generateToken("host");
+        String aliceToken = jwtService.generateToken("alice");
 
         BlockingQueue<SessionResponse> stateMessages = new LinkedBlockingQueue<>();
         BlockingQueue<VotingResultsResponse> voteMessages = new LinkedBlockingQueue<>();
 
-        StompSession hostSession = connectClient();
-        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/state", new QueueFrameHandler<>(SessionResponse.class, stateMessages));
-        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/votes", new QueueFrameHandler<>(VotingResultsResponse.class, voteMessages));
+        StompSession hostSession = connectClient(hostToken);
+        hostSession.subscribe("/topic/session/" + inviteCode + "/state", new QueueFrameHandler<>(SessionResponse.class, stateMessages));
+        hostSession.subscribe("/topic/session/" + inviteCode + "/votes", new QueueFrameHandler<>(VotingResultsResponse.class, voteMessages));
 
-        StompSession aliceSession = connectClient();
-        aliceSession.subscribe("/topic/session/" + INVITE_CODE + "/state", new QueueFrameHandler<>(SessionResponse.class, new LinkedBlockingQueue<>()));
-        aliceSession.subscribe("/topic/session/" + INVITE_CODE + "/votes", new QueueFrameHandler<>(VotingResultsResponse.class, new LinkedBlockingQueue<>()));
+        StompSession aliceSession = connectClient(aliceToken);
+        aliceSession.subscribe("/topic/session/" + inviteCode + "/state", new QueueFrameHandler<>(SessionResponse.class, new LinkedBlockingQueue<>()));
+        aliceSession.subscribe("/topic/session/" + inviteCode + "/votes", new QueueFrameHandler<>(VotingResultsResponse.class, new LinkedBlockingQueue<>()));
 
-        hostSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "host"));
-        aliceSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "alice"));
+        hostSession.send("/app/session.join", Map.of("inviteCode", inviteCode));
+        aliceSession.send("/app/session.join", Map.of("inviteCode", inviteCode));
 
         awaitMessage(stateMessages, state -> state.participantCount() == 2L && "VOTING".equals(state.status()));
         stateMessages.clear();
@@ -148,10 +152,10 @@ class WebSocketStompIntegrationTest {
         );
         SessionResponse waitingState = awaitMessage(stateMessages, state -> "WAITING".equals(state.status()));
 
-        assertThat(firstVoteSnapshot.sessionCode()).isEqualTo(INVITE_CODE);
-        assertThat(votingState.sessionCode()).isEqualTo(INVITE_CODE);
-        assertThat(waitingVotes.sessionCode()).isEqualTo(INVITE_CODE);
-        assertThat(waitingState.sessionCode()).isEqualTo(INVITE_CODE);
+        assertThat(firstVoteSnapshot.sessionCode()).isEqualTo(inviteCode);
+        assertThat(votingState.sessionCode()).isEqualTo(inviteCode);
+        assertThat(waitingVotes.sessionCode()).isEqualTo(inviteCode);
+        assertThat(waitingState.sessionCode()).isEqualTo(inviteCode);
 
         hostSession.send("/app/session.reveal", Map.of(
                 "inviteCode", "WRONG",
@@ -161,14 +165,14 @@ class WebSocketStompIntegrationTest {
         VotingResultsResponse revealedVotes = awaitMessage(voteMessages, VotingResultsResponse::revealed);
         SessionResponse revealedState = awaitMessage(stateMessages, state -> "REVEALED".equals(state.status()));
 
-        assertThat(revealedVotes.sessionCode()).isEqualTo(INVITE_CODE);
+        assertThat(revealedVotes.sessionCode()).isEqualTo(inviteCode);
         assertThat(revealedVotes.votes())
                 .extracting(VoteResponse::username, VoteResponse::cardValue)
                 .containsExactlyInAnyOrder(
                         org.assertj.core.groups.Tuple.tuple("alice", "3"),
                         org.assertj.core.groups.Tuple.tuple("host", "5")
                 );
-        assertThat(revealedState.sessionCode()).isEqualTo(INVITE_CODE);
+        assertThat(revealedState.sessionCode()).isEqualTo(inviteCode);
 
         hostSession.send("/app/session.reset-votes", Map.of(
                 "inviteCode", "OTHER-ROOM",
@@ -179,8 +183,8 @@ class WebSocketStompIntegrationTest {
         VotingResultsResponse resetVotes = awaitMessage(voteMessages, votes -> !votes.revealed() && votes.votes().isEmpty());
         SessionResponse resetState = awaitMessage(stateMessages, state -> "VOTING".equals(state.status()));
 
-        assertThat(resetVotes.sessionCode()).isEqualTo(INVITE_CODE);
-        assertThat(resetState.sessionCode()).isEqualTo(INVITE_CODE);
+        assertThat(resetVotes.sessionCode()).isEqualTo(inviteCode);
+        assertThat(resetState.sessionCode()).isEqualTo(inviteCode);
 
         hostSession.disconnect();
         aliceSession.disconnect();
@@ -192,32 +196,36 @@ class WebSocketStompIntegrationTest {
 
         User host = userRepository.save(buildUser("host", "host@example.com", UserRole.HOST));
         User alice = userRepository.save(buildUser("alice", "alice@example.com", UserRole.VOTER));
-        deckRepository.save(buildDeck());
-        sessionRepository.save(GameSession.builder()
-                .sessionCode(INVITE_CODE)
-                .name("Sprint Planning")
-                .hostUserId(host.getId())
-                .status(SessionStatus.WAITING)
-                .deck(deckRepository.findByName("Fibonacci").orElseThrow())
-                .build());
+        VotingDeck deck = deckRepository.save(buildDeck());
+
+        SessionResponse created = gameSessionService.createSession("host", new CreateSessionRequest("Sprint Planning"), deck.getId());
+        String inviteCode = created.sessionCode();
+
+        // Manually set session to WAITING for reveal/reset test
+        var session = sessionRepository.findBySessionCode(inviteCode).orElseThrow();
+        session.setStatus(com.openpoker.entity.SessionStatus.WAITING);
+        sessionRepository.save(session);
+
+        String hostToken = jwtService.generateToken("host");
+        String aliceToken = jwtService.generateToken("alice");
 
         BlockingQueue<Map> errorMessages = new LinkedBlockingQueue<>();
         BlockingQueue<SessionResponse> stateMessages = new LinkedBlockingQueue<>();
 
-        StompSession hostSession = connectClient();
-        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/state", new QueueFrameHandler<>(SessionResponse.class, stateMessages));
-        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/errors", new QueueFrameHandler<>(Map.class, new LinkedBlockingQueue<>()));
+        StompSession hostSession = connectClient(hostToken);
+        hostSession.subscribe("/topic/session/" + inviteCode + "/state", new QueueFrameHandler<>(SessionResponse.class, stateMessages));
+        hostSession.subscribe("/topic/session/" + inviteCode + "/errors", new QueueFrameHandler<>(Map.class, new LinkedBlockingQueue<>()));
 
-        StompSession aliceSession = connectClient();
-        aliceSession.subscribe("/topic/session/" + INVITE_CODE + "/errors", new QueueFrameHandler<>(Map.class, errorMessages));
+        StompSession aliceSession = connectClient(aliceToken);
+        aliceSession.subscribe("/topic/session/" + inviteCode + "/errors", new QueueFrameHandler<>(Map.class, errorMessages));
 
-        hostSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "host"));
-        aliceSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "alice"));
+        hostSession.send("/app/session.join", Map.of("inviteCode", inviteCode));
+        aliceSession.send("/app/session.join", Map.of("inviteCode", inviteCode));
 
         awaitMessage(stateMessages, state -> state.participantCount() == 2L && "WAITING".equals(state.status()));
 
         aliceSession.send("/app/session.reveal", Map.of(
-                "inviteCode", INVITE_CODE,
+                "inviteCode", inviteCode,
                 "username", "alice"
         ));
 
@@ -226,7 +234,7 @@ class WebSocketStompIntegrationTest {
                 && ((String) error.get("message")).contains("Solo el host puede revelar"));
 
         aliceSession.send("/app/session.reset-votes", Map.of(
-                "inviteCode", INVITE_CODE,
+                "inviteCode", inviteCode,
                 "username", "alice"
         ));
 
@@ -241,9 +249,14 @@ class WebSocketStompIntegrationTest {
         aliceSession.disconnect();
     }
 
-    private StompSession connectClient() throws Exception {
+    private StompSession connectClient(String jwtToken) throws Exception {
+        StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.add("Authorization", "Bearer " + jwtToken);
+
         CompletableFuture<StompSession> future = stompClient.connectAsync(
                 "ws://127.0.0.1:" + port + "/ws-native",
+                new WebSocketHttpHeaders(),
+                connectHeaders,
                 new StompSessionHandlerAdapter() {
                 }
         );

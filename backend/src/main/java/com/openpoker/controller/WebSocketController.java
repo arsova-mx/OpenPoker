@@ -1,7 +1,5 @@
 package com.openpoker.controller;
 
-import com.openpoker.dto.WebSocketJoinSessionRequest;
-import com.openpoker.dto.WebSocketLeaveSessionRequest;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.Participant;
 import com.openpoker.repository.GameSessionRepository;
@@ -32,40 +30,52 @@ public class WebSocketController {
     private final UserRepository userRepository;
 
     @MessageMapping("/session.join")
-    public void join(WebSocketJoinSessionRequest payload, SimpMessageHeaderAccessor headerAccessor) {
+    public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = payload.get("inviteCode");
         try {
-            service.joinSession(payload.username(), payload.inviteCode());
+            String username = resolveUsername(headerAccessor);
 
-            var session = sessionRepository.findBySessionCode(payload.inviteCode()).orElseThrow();
-            var participant = participantRepository.findByGameSessionAndUser(session, userRepository.findByUsername(payload.username()).orElseThrow()).orElseThrow();
+            var session = sessionRepository.findBySessionCode(inviteCode).orElseThrow();
+            var user = userRepository.findByUsername(username).orElseThrow();
 
-            sessionRegistry.register(headerAccessor.getSessionId(), session.getId(), participant.getId(), payload.username(), payload.inviteCode());
+            var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
+            if (existingParticipant.isEmpty()) {
+                service.joinSession(username, inviteCode);
+            }
 
-            List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(payload.inviteCode()));
+            var participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
 
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/participants", participants);
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/state", service.getSessionByCode(payload.inviteCode()));
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(session.getId()));
+            sessionRegistry.register(headerAccessor.getSessionId(), session.getId(), participant.getId(), username, inviteCode);
+
+            List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(inviteCode));
+
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId()));
         } catch (RuntimeException ex) {
-            publishError(payload.inviteCode(), "session.join", ex);
+            publishError(inviteCode, "session.join", ex);
         }
     }
 
     @MessageMapping("/session.leave")
-    public void leave(WebSocketLeaveSessionRequest payload, SimpMessageHeaderAccessor headerAccessor) {
+    public void leave(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
         try {
-            service.leaveSession(payload.username(), payload.inviteCode());
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
+
+            service.leaveSession(sessionInfo.username(), inviteCode);
 
             sessionRegistry.unregister(headerAccessor.getSessionId());
 
-            List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(payload.inviteCode()));
-            var session = sessionRepository.findBySessionCode(payload.inviteCode()).orElseThrow();
+            List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(inviteCode));
+            var session = sessionRepository.findBySessionCode(inviteCode).orElseThrow();
 
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/participants", participants);
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/state", service.getSessionByCode(payload.inviteCode()));
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(session.getId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId()));
         } catch (RuntimeException ex) {
-            publishError(payload.inviteCode(), "session.leave", ex);
+            publishError(inviteCode, "session.leave", ex);
         }
     }
 
@@ -141,6 +151,14 @@ public class WebSocketController {
     private List<WebSocketParticipantResponse> mapParticipants(List<Participant> participants) {
         return participants.stream().map(participant -> new WebSocketParticipantResponse(participant.getUser().getId(), participant.getUser().getUsername(), participant
                 .getRole().name())).toList();
+    }
+
+    private String resolveUsername(SimpMessageHeaderAccessor headerAccessor) {
+        java.security.Principal principal = headerAccessor.getUser();
+        if (principal == null) {
+            throw new IllegalStateException("No authenticated user on WebSocket session");
+        }
+        return principal.getName();
     }
 
     private WebSocketSessionRegistry.SessionInfo getRequiredSessionInfo(SimpMessageHeaderAccessor headerAccessor) {

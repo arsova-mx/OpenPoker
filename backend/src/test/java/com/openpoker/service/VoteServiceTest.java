@@ -95,7 +95,7 @@ class VoteServiceTest {
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
-        when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
         when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(Vote.builder().gameSession(session).user(user).cardValue("5").build()));
 
@@ -138,7 +138,7 @@ class VoteServiceTest {
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
-        when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
         when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(otherVote, Vote.builder().gameSession(session).user(user).cardValue("8").build()));
         when(sessionRepository.save(session)).thenReturn(session);
