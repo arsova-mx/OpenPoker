@@ -12,10 +12,11 @@
 import axios from "axios";
 import { toast } from "sonner";
 
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api';
 
 
 export const instance = axios.create({
-    baseURL: import.meta.env.VITE_API_URL,
+    baseURL: API_URL,
     headers: {
     'Content-Type': 'application/json',
   },
@@ -24,8 +25,8 @@ export const instance = axios.create({
 instance.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('token');
-        if(token){
-          config.headers['Authorization'] = `Bearer ${token}`
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
         }
         return config
     },

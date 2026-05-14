@@ -17,8 +17,12 @@ export default function Root() {
  
     useEffect( () => {
 
+<<<<<<< HEAD
         if (!token || !isAuthenticated) {
             handleLogout();
+=======
+        if (!token) {
+>>>>>>> eb97fa4a88d104abe6a257c59949fa9a1459d359
             return;
         }
 

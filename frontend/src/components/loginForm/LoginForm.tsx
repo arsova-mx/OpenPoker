@@ -1,5 +1,6 @@
 
 import { useForm, Controller } from "react-hook-form"
+import { useState } from "react"
 import useAuthStore from "@/store/authStore"
 import { authService } from "@/services/authService";
 import { Link, useSubmit } from "react-router-dom";
@@ -14,6 +15,7 @@ import { PasswordInput } from "../ui/PasswordInput";
 
 export default function LoginForm() {
     const submit = useSubmit()
+    const [serverError, setServerError] = useState<string | null>(null);
     
     const loginState = useAuthStore( (state) => state.login);
 
@@ -39,7 +41,11 @@ export default function LoginForm() {
     });
 
     async function onSubmit(data: z.infer<typeof formSchema>) {
+        setServerError(null);
+        try {
+            const response = await login(data);
 
+<<<<<<< HEAD
         const response = await login(data);
 
         if(response) {
@@ -50,11 +56,30 @@ export default function LoginForm() {
             
             loginState(data.username, token, tokenDuration);
             submit(null, {action:"/auth",method: 'post'});
+=======
+            if(response.token !== null) {
+                const token = response.token;
+                setToken(token);
+                
+                const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
+                
+                loginState(data.username, token, tokenDuration);
+                submit(null, {action:"/auth",method: 'post'});
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Error al iniciar sesión";
+            setServerError(message);
+>>>>>>> eb97fa4a88d104abe6a257c59949fa9a1459d359
         }
     }
 
     return (
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+            {serverError && (
+                <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {serverError}
+                </p>
+            )}
             <div className="flex flex-col gap-2">
                 <Controller 
                     name= "username"
