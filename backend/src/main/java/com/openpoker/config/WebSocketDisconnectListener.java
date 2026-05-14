@@ -2,7 +2,6 @@ package com.openpoker.config;
 
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.service.GameSessionService;
-import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +19,6 @@ public class WebSocketDisconnectListener {
 
     private final WebSocketSessionRegistry registry;
     private final GameSessionService gameSessionService;
-    private final VoteService voteService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @EventListener
