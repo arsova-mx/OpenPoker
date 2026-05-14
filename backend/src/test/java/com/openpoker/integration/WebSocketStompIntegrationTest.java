@@ -80,32 +80,12 @@ class WebSocketStompIntegrationTest {
 
     @BeforeEach
     @AfterEach
-    void cleanup() throws Exception {
-        try {
-            voteRepository.deleteAll();
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-        try {
-            participantRepository.deleteAll();
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-        try {
-            sessionRepository.deleteAll();
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-        try {
-            deckRepository.deleteAll();
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
-        try {
-            userRepository.deleteAll();
-        } catch (Exception e) {
-            // Ignore cleanup errors
-        }
+    void cleanup() {
+        voteRepository.deleteAll();
+        participantRepository.deleteAll();
+        sessionRepository.deleteAll();
+        deckRepository.deleteAll();
+        userRepository.deleteAll();
     }
 
     @Test
