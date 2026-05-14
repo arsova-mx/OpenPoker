@@ -13,13 +13,15 @@ import Auth from './routes/Auth';
 import SessionLobby from './routes/SessionLobby'
 
 import { Toaster } from 'sonner';
+import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
+import useAuthStore from './store/authStore';
 /**
  * Root application component.
  *
  * TODO: Replace with actual application shell (router, layout, context providers)
  * once development begins.
  */
-
+  const isAuthenticated = !!useAuthStore((state) => state.isAuthenticated)
 
   const router = createBrowserRouter(
     [
@@ -59,9 +61,23 @@ import { Toaster } from 'sonner';
             ]
           },
           {
-            path: 'SessionLobby',
-            element: <SessionLobby/>
-          }
+            children:[
+              {
+                path: 'SessionLobby',
+              element: <SessionLobby/>
+              }
+            ]
+          },
+          {
+            element: <ProtectedRoute isAllowed={isAuthenticated}/>,
+            path: 'sessions',
+            children: 
+            [
+              {
+                path: ':code'
+              }
+            ]
+          },
         ]
       }
     ]
