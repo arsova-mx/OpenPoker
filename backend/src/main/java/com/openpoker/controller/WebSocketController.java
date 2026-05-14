@@ -1,6 +1,15 @@
 package com.openpoker.controller;
 
+import com.openpoker.dto.WebSocketJoinSessionRequest;
+import com.openpoker.dto.WebSocketLeaveSessionRequest;
+import com.openpoker.dto.WebSocketParticipantResponse;
+import com.openpoker.entity.Participant;
+import com.openpoker.repository.GameSessionRepository;
+import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.service.GameSessionService;
+import com.openpoker.service.VoteService;
+import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -9,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+
 
 @RestController
 @RequiredArgsConstructor
@@ -29,7 +39,7 @@ public class WebSocketController {
             var session = sessionRepository.findBySessionCode(payload.inviteCode()).orElseThrow();
             var participant = participantRepository.findByGameSessionAndUser(session, userRepository.findByUsername(payload.username()).orElseThrow()).orElseThrow();
 
-            sessionRegistry.register(headerAccessor.getSessionId(), session.getId(), participant.getId());
+            sessionRegistry.register(headerAccessor.getSessionId(), session.getId(), participant.getId(), payload.username(), payload.inviteCode());
 
             List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(payload.inviteCode()));
 
@@ -49,10 +59,11 @@ public class WebSocketController {
             sessionRegistry.unregister(headerAccessor.getSessionId());
 
             List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(payload.inviteCode()));
+            var session = sessionRepository.findBySessionCode(payload.inviteCode()).orElseThrow();
 
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/state", service.getSessionByCode(payload.inviteCode()));
-            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(payload.inviteCode()));
+            messagingTemplate.convertAndSend("/topic/session/" + payload.inviteCode() + "/vote-status", voteService.getVoteStatus(session.getId()));
         } catch (RuntimeException ex) {
             publishError(payload.inviteCode(), "session.leave", ex);
         }
@@ -69,7 +80,7 @@ public class WebSocketController {
 
             voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(inviteCode, getUsernameFromParticipant(sessionInfo.participantId())));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
         } catch (RuntimeException ex) {
@@ -142,7 +153,15 @@ public class WebSocketController {
         return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
-    private String getUsernameFromParticipant(UUID participantId) {
-        return participantRepository.findById(participantId).orElseThrow().getUser().getUsername();
+    private void publishError(String inviteCode, String action, RuntimeException ex) {
+        if (inviteCode == null || inviteCode.isBlank()) {
+            return;
+        }
+
+        messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) Map.of(
+                "action", action,
+                "type", ex.getClass().getSimpleName(),
+                "message", ex.getMessage()
+        ));
     }
 }

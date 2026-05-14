@@ -70,11 +70,21 @@ class VoteServiceTest {
                 ))
                 .build();
 
-        session = GameSession.builder().sessionCode("ABC").status(SessionStatus.VOTING).deck(deck).build();
+        session = GameSession.builder()
+                .id(UUID.randomUUID())
+                .sessionCode("ABC")
+                .status(SessionStatus.VOTING)
+                .deck(deck)
+                .build();
 
         user = User.builder().id(UUID.randomUUID()).username("user").build();
 
-        participant = Participant.builder().gameSession(session).user(user).role(Participant.Role.VOTER).build();
+        participant = Participant.builder()
+                .id(UUID.randomUUID())
+                .gameSession(session)
+                .user(user)
+                .role(Participant.Role.VOTER)
+                .build();
     }
 
     @Test
@@ -82,6 +92,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
         when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
@@ -98,6 +110,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
 
         assertThrows(InvalidVoteValueException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("999")));
     }
@@ -106,6 +120,9 @@ class VoteServiceTest {
     void castVote_rejectsWhenSessionIsNotVoting() {
         session.setStatus(SessionStatus.WAITING);
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
 
         assertThrows(SessionNotInVotingException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("5")));
     }
@@ -118,6 +135,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
         when(voteRepository.save(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
@@ -138,6 +157,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(sessionRepository.save(session)).thenReturn(session);
         when(voteRepository.findAllByGameSession(session)).thenReturn(List.of());
 
@@ -156,6 +177,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(vote));
 
         VotingResultsResponse res = service.getVotes("ABC", "user");
@@ -172,6 +195,8 @@ class VoteServiceTest {
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(vote));
 
         VotingResultsResponse res = service.getVotes("ABC", "user");

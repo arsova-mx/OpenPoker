@@ -16,6 +16,7 @@ import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
 import com.openpoker.repository.VotingDeckRepository;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -77,6 +78,7 @@ class WebSocketStompIntegrationTest {
 
     private final WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
 
+    @BeforeEach
     @AfterEach
     void cleanup() throws Exception {
         try {
@@ -199,6 +201,61 @@ class WebSocketStompIntegrationTest {
 
         assertThat(resetVotes.sessionCode()).isEqualTo(INVITE_CODE);
         assertThat(resetState.sessionCode()).isEqualTo(INVITE_CODE);
+
+        hostSession.disconnect();
+        aliceSession.disconnect();
+    }
+
+    @Test
+    void stompFlow_nonHostRevealAndReset_publishesAuthorizationErrors() throws Exception {
+        stompClient.setMessageConverter(new JacksonJsonMessageConverter());
+
+        User host = userRepository.save(buildUser("host", "host@example.com", UserRole.HOST));
+        User alice = userRepository.save(buildUser("alice", "alice@example.com", UserRole.VOTER));
+        deckRepository.save(buildDeck());
+        sessionRepository.save(GameSession.builder()
+                .sessionCode(INVITE_CODE)
+                .name("Sprint Planning")
+                .hostUserId(host.getId())
+                .status(SessionStatus.WAITING)
+                .deck(deckRepository.findByName("Fibonacci").orElseThrow())
+                .build());
+
+        BlockingQueue<Map> errorMessages = new LinkedBlockingQueue<>();
+        BlockingQueue<SessionResponse> stateMessages = new LinkedBlockingQueue<>();
+
+        StompSession hostSession = connectClient();
+        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/state", new QueueFrameHandler<>(SessionResponse.class, stateMessages));
+        hostSession.subscribe("/topic/session/" + INVITE_CODE + "/errors", new QueueFrameHandler<>(Map.class, new LinkedBlockingQueue<>()));
+
+        StompSession aliceSession = connectClient();
+        aliceSession.subscribe("/topic/session/" + INVITE_CODE + "/errors", new QueueFrameHandler<>(Map.class, errorMessages));
+
+        hostSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "host"));
+        aliceSession.send("/app/session.join", new WebSocketJoinSessionRequest(INVITE_CODE, "alice"));
+
+        awaitMessage(stateMessages, state -> state.participantCount() == 2L && "WAITING".equals(state.status()));
+
+        aliceSession.send("/app/session.reveal", Map.of(
+                "inviteCode", INVITE_CODE,
+                "username", "alice"
+        ));
+
+        Map revealError = awaitMessage(errorMessages, error -> "session.reveal".equals(error.get("action"))
+                && "OnlyHostCanRevealVotesException".equals(error.get("type"))
+                && ((String) error.get("message")).contains("Solo el host puede revelar"));
+
+        aliceSession.send("/app/session.reset-votes", Map.of(
+                "inviteCode", INVITE_CODE,
+                "username", "alice"
+        ));
+
+        Map resetError = awaitMessage(errorMessages, error -> "session.reset-votes".equals(error.get("action"))
+                && "InsufficientRoleException".equals(error.get("type"))
+                && ((String) error.get("message")).contains("Solo el host puede reiniciar la votacion"));
+
+        assertThat(revealError).isNotNull();
+        assertThat(resetError).isNotNull();
 
         hostSession.disconnect();
         aliceSession.disconnect();

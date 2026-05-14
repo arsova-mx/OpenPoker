@@ -137,7 +137,37 @@ public class VoteService {
 
         sessionRepository.save(session);
 
-        return getVotes(session.getSessionCode(), participant.getUser().getUsername());
+        return getVotes(sessionId, participantId);
+    }
+
+    public VoteResponse castVote(String username, String sessionCode, CastVoteRequest request) {
+        GameSession session = getSessionByCode(sessionCode);
+        Participant participant = getParticipant(session, username);
+        return submitVote(session.getId(), participant.getId(), request.cardValue());
+    }
+
+    public VotingResultsResponse getVotes(String sessionCode, String username) {
+        GameSession session = getSessionByCode(sessionCode);
+        Participant participant = getParticipant(session, username);
+        return getVotes(session.getId(), participant.getId());
+    }
+
+    public VotingResultsResponse revealVotes(String username, String sessionCode) {
+        GameSession session = getSessionByCode(sessionCode);
+        Participant participant = getParticipant(session, username);
+        return revealVotes(session.getId(), participant.getId());
+    }
+
+    private GameSession getSessionByCode(String sessionCode) {
+        return sessionRepository.findBySessionCode(sessionCode)
+                .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+    }
+
+    private Participant getParticipant(GameSession session, String username) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+        return participantRepository.findByGameSessionAndUser(session, user)
+                .orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
     }
 
     @Transactional

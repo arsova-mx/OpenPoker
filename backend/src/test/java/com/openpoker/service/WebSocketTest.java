@@ -10,6 +10,9 @@ import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
 import com.openpoker.globalexception.InvalidVoteValueException;
+import com.openpoker.repository.GameSessionRepository;
+import com.openpoker.repository.ParticipantRepository;
+import com.openpoker.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -36,6 +39,15 @@ class WebSocketTest {
     private GameSessionService sessionService;
 
     @Mock
+    private GameSessionRepository sessionRepository;
+
+    @Mock
+    private ParticipantRepository participantRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private SimpMessagingTemplate messagingTemplate;
 
     @Mock
@@ -51,7 +63,9 @@ class WebSocketTest {
 
     @Test
     void join_broadcastsParticipantsToInviteCodeTopic() {
-        Participant participant = buildParticipant("alice", Participant.Role.VOTER);
+        User user = User.builder().id(UUID.randomUUID()).username("alice").build();
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").build();
+        Participant participant = Participant.builder().id(UUID.randomUUID()).gameSession(session).user(user).role(Participant.Role.VOTER).build();
         List<Participant> participants = List.of(participant);
         List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(participant.getUser().getId(), "alice", "VOTER"));
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
@@ -59,14 +73,17 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(voteService.getVoteStatus("ABC123")).thenReturn(Map.of());
+        when(voteService.getVoteStatus(session.getId())).thenReturn(Map.of());
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
 
         webSocketController.join(new WebSocketJoinSessionRequest("ABC123", "alice"), headerAccessor);
 
         verify(sessionService).joinSession("alice", "ABC123");
         verify(sessionService).getParticipants("ABC123");
         verify(sessionService).getSessionByCode("ABC123");
-        verify(sessionRegistry).register("ws-session-1", "alice", "ABC123");
+        verify(sessionRegistry).register("ws-session-1", session.getId(), participant.getId(), "alice", "ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", (Object) expected);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
@@ -74,6 +91,7 @@ class WebSocketTest {
 
     @Test
     void leave_broadcastsParticipantsToInviteCodeTopic() {
+        GameSession session = GameSession.builder().id(UUID.randomUUID()).sessionCode("ABC123").build();
         Participant participant = buildParticipant("host", Participant.Role.HOST);
         List<Participant> participants = List.of(participant);
         List<WebSocketParticipantResponse> expected = List.of(new WebSocketParticipantResponse(participant.getUser().getId(), "host", "HOST"));
@@ -82,7 +100,8 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(voteService.getVoteStatus("ABC123")).thenReturn(Map.of());
+        when(voteService.getVoteStatus(session.getId())).thenReturn(Map.of());
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
 
         webSocketController.leave(new WebSocketLeaveSessionRequest("ABC123", "alice"), headerAccessor);
 
@@ -99,15 +118,16 @@ class WebSocketTest {
     void vote_broadcastsVotesAndState() {
         UUID sessionId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(sessionId).sessionCode("ABC123").build();
         VotingResultsResponse votingResults = new VotingResultsResponse("ABC123", List.of(), false);
         SessionResponse sessionResponse = buildSessionResponse("ABC123", "WAITING", 2L);
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
         when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
         when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
         webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "5"), headerAccessor);
 
@@ -124,15 +144,16 @@ class WebSocketTest {
     void reveal_broadcastsRevealedVotesAndState() {
         UUID sessionId = UUID.randomUUID();
         UUID participantId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(sessionId).sessionCode("ABC123").build();
         VotingResultsResponse votingResults = new VotingResultsResponse("ABC123", List.of(), true);
         SessionResponse sessionResponse = buildSessionResponse("ABC123", "REVEALED", 2L);
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
         when(voteService.revealVotes(sessionId, participantId)).thenReturn(votingResults);
         when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
         webSocketController.reveal(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
 
@@ -146,37 +167,44 @@ class WebSocketTest {
 
     @Test
     void vote_broadcastsErrorWhenVoteFails() {
+        UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(sessionId).sessionCode("ABC123").build();
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo("alice", "ABC123")));
-        when(voteService.castVote("alice", "ABC123", new com.openpoker.dto.CastVoteRequest("999")))
-                .thenThrow(new InvalidVoteValueException("Valor invalido"));
-        Object errorPayload = Map.of(
-                "action", "session.vote",
-                "type", "InvalidVoteValueException",
-                "message", "Valor invalido"
-        );
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
+        when(voteService.submitVote(sessionId, participantId, "999")).thenThrow(new InvalidVoteValueException("Valor invalido"));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
         webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "999"), headerAccessor);
 
-        verify(messagingTemplate).convertAndSend("/topic/session/ABC123/errors", errorPayload);
-        verify(voteService, never()).getVotes("ABC123", "alice");
+        verify(messagingTemplate).convertAndSend(
+                "/topic/session/ABC123/errors",
+                (Object) Map.of(
+                        "action", "session.vote",
+                        "type", "InvalidVoteValueException",
+                        "message", "Valor invalido"
+                )
+        );
+        verify(voteService, never()).getVotes(sessionId, participantId);
         verify(sessionService, never()).getSessionByCode("ABC123");
     }
 
     @Test
     void resetVotes_broadcastsClearedVotesAndState() {
         UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
+        GameSession session = GameSession.builder().id(sessionId).sessionCode("ABC123").build();
         VotingResultsResponse votingResults = new VotingResultsResponse("ABC123", List.of(), false);
         SessionResponse sessionResponse = new SessionResponse(sessionId, "ABC123", "Sprint Planning", "host",
                 "VOTING", 2L, new Timestamp(System.currentTimeMillis()));
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId)));
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
         when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
         when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(new GameSession()));
+        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
         webSocketController.resetVotes(Map.of(
                 "inviteCode", "OTHER",
@@ -195,10 +223,12 @@ class WebSocketTest {
 
     @Test
     void finish_broadcastsEmptyParticipantsAndFinishedState() {
+        UUID sessionId = UUID.randomUUID();
+        UUID participantId = UUID.randomUUID();
         SessionResponse sessionResponse = buildSessionResponse("ABC123", "FINISHED", 0L);
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1");
 
-        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo("host", "ABC123")));
+        when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "host", "ABC123")));
         when(sessionService.finishSession("host", "ABC123")).thenReturn(sessionResponse);
 
         webSocketController.finish(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
