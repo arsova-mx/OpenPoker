@@ -57,8 +57,8 @@ public class JwtService {
         return configuredSecret.getBytes(StandardCharsets.UTF_8);
     }
     public String generateToken(String username) {
-        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System
-                .currentTimeMillis() + expiration)).signWith(getKey(), SignatureAlgorithm.HS256).compact();
+        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + expiration)).signWith(getKey(),
+                SignatureAlgorithm.HS256).compact();
     }
 
     public String extractUsername(String token) {

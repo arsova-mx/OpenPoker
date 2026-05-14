@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -13,12 +14,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class WebSocketSessionRegistry {
 
-    public record SessionInfo(String username, String inviteCode) {}
+    public record SessionInfo(UUID sessionId, UUID participantId, String username, String inviteCode) {}
 
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
 
-    public void register(String wsSessionId, String username, String inviteCode) {
-        sessions.put(wsSessionId, new SessionInfo(username, inviteCode));
+    public void register(String wsSessionId, UUID sessionId, UUID participantId, String username, String inviteCode) {
+        sessions.put(wsSessionId, new SessionInfo(sessionId, participantId, username, inviteCode));
     }
 
     public Optional<SessionInfo> unregister(String wsSessionId) {

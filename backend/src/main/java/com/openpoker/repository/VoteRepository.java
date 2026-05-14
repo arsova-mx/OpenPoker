@@ -14,4 +14,5 @@ import java.util.UUID;
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
     Optional<Vote> findByGameSessionAndUser(GameSession gameSession, User user);
     List<Vote> findAllByGameSession(GameSession gameSession);
+    void deleteAllByGameSession(GameSession gameSession);
 }
