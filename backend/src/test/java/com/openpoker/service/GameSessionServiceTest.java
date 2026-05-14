@@ -29,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -133,11 +134,65 @@ class GameSessionServiceTest {
         when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
         when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
         when(sessionRepository.save(session)).thenReturn(session);
-        when(participantRepository.countByGameSession(session)).thenReturn(2L);
+        when(participantRepository.countByGameSession(session)).thenReturn(0L);
 
         SessionResponse response = gameSessionService.finishSession("host", "ABC123");
 
         assertEquals("FINISHED", response.status());
+        assertEquals(0L, response.participantCount());
         assertEquals(SessionStatus.FINISHED, session.getStatus());
+        verify(participantRepository).deleteAllByGameSession(session);
+    }
+
+    @Test
+    void joinSession_rejoiningHostKeepsHostRole() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder()
+                .id(UUID.randomUUID())
+                .sessionCode("ABC123")
+                .name("Sprint 1")
+                .hostUserId(hostId)
+                .status(SessionStatus.VOTING)
+                .createdAt(new Timestamp(System.currentTimeMillis()))
+                .build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
+        when(userRepository.findById(hostId)).thenReturn(Optional.of(host));
+        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.empty());
+        when(participantRepository.countByGameSession(session)).thenReturn(1L);
+
+        SessionResponse response = gameSessionService.joinSession("host", "ABC123");
+
+        assertEquals("host", response.hostUsername());
+        verify(participantRepository).save(argThat(participant ->
+                participant.getGameSession().equals(session)
+                        && participant.getUser().equals(host)
+                        && participant.getRole() == Participant.Role.HOST));
+    }
+
+    @Test
+    void leaveSession_hostCannotLeave() {
+        UUID hostId = UUID.randomUUID();
+        GameSession session = GameSession.builder()
+                .id(UUID.randomUUID())
+                .sessionCode("ABC123")
+                .name("Sprint 1")
+                .hostUserId(hostId)
+                .status(SessionStatus.VOTING)
+                .createdAt(new Timestamp(System.currentTimeMillis()))
+                .build();
+        User host = User.builder().id(hostId).username("host").role(UserRole.HOST).build();
+        Participant participant = Participant.builder().gameSession(session).user(host).role(Participant.Role.HOST).build();
+
+        when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
+        when(userRepository.findByUsername("host")).thenReturn(Optional.of(host));
+        when(participantRepository.findByGameSessionAndUser(session, host)).thenReturn(Optional.of(participant));
+
+        InsufficientRoleException ex = assertThrows(InsufficientRoleException.class,
+                () -> gameSessionService.leaveSession("host", "ABC123"));
+
+        assertEquals("El host no puede abandonar la session", ex.getMessage());
     }
 }
