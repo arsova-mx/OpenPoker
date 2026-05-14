@@ -88,7 +88,12 @@ public class WebSocketController {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
+            try {
+                voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                // Race: concurrent first vote. Retry in a fresh transaction where the existing vote is found and updated.
+                voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
+            }
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
@@ -176,10 +181,12 @@ public class WebSocketController {
             return;
         }
 
+        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+
         messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) Map.of(
                 "action", action,
                 "type", ex.getClass().getSimpleName(),
-                "message", ex.getMessage()
+                "message", message
         ));
     }
 }

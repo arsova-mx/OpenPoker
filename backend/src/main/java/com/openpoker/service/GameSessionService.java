@@ -147,6 +147,7 @@ public class GameSessionService {
         return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, session.getStatus().name(), count, session.getCreatedAt());
     }
 
+    @Transactional
     public void handleDisconnect(String username, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 

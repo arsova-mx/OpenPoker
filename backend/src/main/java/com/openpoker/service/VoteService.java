@@ -11,7 +11,6 @@ import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -53,18 +52,15 @@ public class VoteService {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        Vote vote = voteRepository.findByGameSessionAndUser(session, participant.getUser())
-                .orElseGet(() -> Vote.builder().gameSession(session).user(participant.getUser()).build());
-
-        vote.setCardValue(value);
+        Vote vote = voteRepository.findByGameSessionAndUser(session, participant.getUser()).orElse(null);
 
         Vote savedVote;
 
-        try {
-            savedVote = voteRepository.saveAndFlush(vote);
-        } catch (DataIntegrityViolationException ex) {
-            vote = voteRepository.findByGameSessionAndUser(session, participant.getUser()).orElseThrow(() -> ex);
+        if (vote != null) {
             vote.setCardValue(value);
+            savedVote = voteRepository.saveAndFlush(vote);
+        } else {
+            vote = Vote.builder().gameSession(session).user(participant.getUser()).cardValue(value).build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
 
