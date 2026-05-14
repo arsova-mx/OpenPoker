@@ -37,7 +37,7 @@ export default function RegisterForm() {
     const authRegister = authService.register;
     const submit = useSubmit();
     const login = authService.login;
-    const setToken = authService.saveToken
+    const saveToken = authService.saveToken
     const loginState = useAuthStore( (state) => state.login);  
 
     const form = useForm<z.infer<typeof registerSchema>>({
@@ -65,9 +65,9 @@ export default function RegisterForm() {
             login(loginForm);
 
             const token = response.token;
+            saveToken(token);
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
-            
-            setToken(token);
+        
             loginState(data.username, token, tokenDuration);
 
             submit(null, { action:'/auth', method: 'post'});
@@ -86,8 +86,8 @@ export default function RegisterForm() {
                                 Correo electronico
                             </FieldLabel >
                             <Input 
-                                type="email"
                                 {...field} 
+                                type="email"
                                 id="email"
                                 placeholder="Correo electronico"
                                 aria-invalid={fieldState.invalid}
@@ -110,10 +110,10 @@ export default function RegisterForm() {
                             <FieldLabel  htmlFor="username">
                                 Usuario
                             </FieldLabel >
-                            <Input 
-                                type="text"
+                            <Input
                                 {...field} 
                                 id="username"
+                                type="text"
                                 placeholder="Nombre de usuario"
                                 aria-invalid={fieldState.invalid}
                             />
@@ -132,9 +132,7 @@ export default function RegisterForm() {
                     control= {form.control}
                     render={( ({field, fieldState}) => (
                         <Field data-invalid={fieldState.invalid}>
-                            <FieldLabel  htmlFor="password">
-                                Contraseña
-                            </FieldLabel >
+                            <FieldLabel  htmlFor="password">Contraseña</FieldLabel >
                             <PasswordInput 
                                 {...field} 
                                 id="password"
@@ -159,7 +157,7 @@ export default function RegisterForm() {
                             <FieldLabel htmlFor="confirmPassword">Confirmar contraseña</FieldLabel>
                             <PasswordInput 
                                 {...field} 
-                                id="password"
+                                id="confirmPassword"
                                 placeholder="Repite la contraseña"
                                 aria-invalid={fieldState.invalid}
                             />

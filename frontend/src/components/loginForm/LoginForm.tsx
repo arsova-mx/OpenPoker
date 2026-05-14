@@ -42,7 +42,7 @@ export default function LoginForm() {
 
         const response = await login(data);
 
-        if(response.token !== null) {
+        if(response) {
             const token = response.token;
             setToken(token);
             

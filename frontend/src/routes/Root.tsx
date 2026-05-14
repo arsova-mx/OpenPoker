@@ -6,26 +6,31 @@ import useAuthStore from "@/store/authStore";
 
 export default function Root() {
     const token = useLoaderData();
+    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const logout = useAuthStore( (state) => state.logout);
     const submit = useSubmit();
 
+    function handleLogout() {
+        logout();
+        submit(null, {action:"/auth/logout", method:"post" });
+    }
+ 
     useEffect( () => {
 
-        if (!token) {
-            return;
-        }
-
-        if(token === null) {
-            logout();
-            submit(null, {action:"/auth/logout", method:"post" });
+        if (!token || !isAuthenticated) {
+            handleLogout();
             return;
         }
 
         const timeRemaining = getTokenDuration();
 
+        if(timeRemaining < 0) {
+            handleLogout();
+            return;
+        }
+
         const timer = setTimeout( () => {
-            logout();
-            submit(null, {action:"/auth/logout", method:"post" });
+            handleLogout();
         }, timeRemaining);
 
         return () => clearTimeout(timer);

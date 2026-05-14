@@ -31,7 +31,6 @@ import Auth from './routes/Auth';
           { 
             index: true,
             element: <Main/>,
-            
           },
           {
             path: 'auth',
@@ -44,21 +43,20 @@ import Auth from './routes/Auth';
               {
                 path:'login',
                 element: <Login/>,
-                
               },
               {
                 path:'register',
-                element: <Register/>
+                element: <Register/>,
               },
               {
                 path: 'logout',
-                action: logoutAction
-              }
-            ]
+                action: logoutAction,
+              },
+            ],
           },
-        ]
-      }
-    ]
+        ],
+      },
+    ],
   );
 function App() {
   return (

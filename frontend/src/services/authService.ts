@@ -9,8 +9,9 @@ const login = async (data: LoginRequest): Promise<AuthResponse> => {
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error)){
-            const serverMessage = error.response?.data
-            throw new Error (serverMessage || "Error de autenticación")
+            const serverMessage = error.response?.data.message
+            console.log(serverMessage);
+            throw new Error (serverMessage || "Error de autenticación generico" )
         }
         throw new Error('Ocurrió un error inesperado al conectar con el servidor');
     }
