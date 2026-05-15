@@ -2,6 +2,7 @@ package com.openpoker.service;
 
 import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
+import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -36,6 +37,21 @@ public class GameSessionService {
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
         VotingDeck deck = deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException("Deck no encontrado"));
+
+        return createSessionWithDeck(user, request, deck);
+    }
+
+    @Transactional
+    public SessionResponse createSessionWithDefaultDeck(String username, CreateSessionRequest request) {
+        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+
+        VotingDeck deck = deckRepository.findBySeriesType(CardSeries.FIBONACCI)
+                .orElseThrow(() -> new DeckNotFoundException("Deck Fibonacci no encontrado"));
+
+        return createSessionWithDeck(user, request, deck);
+    }
+
+    private SessionResponse createSessionWithDeck(User user, CreateSessionRequest request, VotingDeck deck) {
 
         GameSession session = null;
 

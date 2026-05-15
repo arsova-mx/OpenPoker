@@ -11,6 +11,7 @@ import com.openpoker.entity.UserRole;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotFoundException;
+import com.openpoker.model.CardSeries;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
@@ -194,5 +195,24 @@ class GameSessionServiceTest {
                 () -> gameSessionService.leaveSession("host", "ABC123"));
 
         assertEquals("El host no puede abandonar la session", ex.getMessage());
+    }
+
+    @Test
+    void createSessionWithDefaultDeck_usesFibonacci() {
+        User user = User.builder().id(UUID.randomUUID()).username("user").role(UserRole.HOST).build();
+        VotingDeck fibonacciDeck = VotingDeck.builder().id(UUID.randomUUID()).name("Fibonacci").seriesType(CardSeries.FIBONACCI).build();
+
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(deckRepository.findBySeriesType(CardSeries.FIBONACCI)).thenReturn(Optional.of(fibonacciDeck));
+        when(codeGenerator.generate()).thenReturn("DEF456");
+        when(sessionRepository.saveAndFlush(any(GameSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(participantRepository.countByGameSession(any())).thenReturn(1L);
+
+        SessionResponse res = gameSessionService.createSessionWithDefaultDeck("user", new CreateSessionRequest("Sprint 2"));
+
+        assertNotNull(res);
+        assertEquals("DEF456", res.sessionCode());
+        assertEquals("Sprint 2", res.name());
+        assertEquals("VOTING", res.status());
     }
 }
