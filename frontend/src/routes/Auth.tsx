@@ -1,4 +1,4 @@
-import { Link, Outlet, redirect } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { RiCheckboxCircleLine } from "@remixicon/react";
 
 const features = [
@@ -52,8 +52,4 @@ export default function Auth() {
             </div>
         </div>
     )
-}
-
-export async function action() {
-    return redirect("/");
 }

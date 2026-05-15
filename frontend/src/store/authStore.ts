@@ -8,7 +8,7 @@ interface AuthState {
     token: string | null;
     tokenDuration: string | null;
     email: string | null;
-    login: (username: string, token: string, tokenDuration: string) => void;
+    login: (username: string, token: string, tokenDuration: string | null) => void;
     logout: () => void;
 }
 

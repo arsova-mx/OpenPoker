@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket STOMP Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
+        h2 { color: #569cd6; }
+        input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
+        button { cursor: pointer; background: #0e639c; border: none; }
+        button:hover { background: #1177bb; }
+        #log { background: #111; padding: 12px; margin-top: 12px; max-height: 400px; overflow-y: auto; border-radius: 4px; white-space: pre-wrap; }
+        .connected { color: #4ec9b0; }
+        .error { color: #f44747; }
+        .msg { color: #ce9178; }
+        .sent { color: #dcdcaa; }
+    </style>
+</head>
+<body>
+    <h2>OpenPoker — WebSocket STOMP Tester</h2>
+
+    <div>
+        <label>Invite Code: <input id="inviteCode" value="" placeholder="ABC123"></label>
+        <label>Username: <input id="username" value="" placeholder="testUser"></label>
+        <label>Card Value: <input id="cardValue" value="5" placeholder="5"></label>
+    </div>
+    <div style="margin-top:8px">
+        <button onclick="connect()">Connect</button>
+        <button onclick="joinSession()">Join Session</button>
+        <button onclick="voteSession()">Vote</button>
+        <button onclick="revealVotes()">Reveal Votes</button>
+        <button onclick="resetVotes()">Reset Votes</button>
+        <button id="finishButton" onclick="finishSession()" disabled>Finish Session</button>
+        <button onclick="leaveSession()">Leave Session</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        let stompClient = null;
+        let lastSessionState = null;
+        let lastParticipants = [];
+
+        function log(msg, cls = '') {
+            const el = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            el.innerHTML += `<span class="${cls}">[${time}] ${msg}</span>\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function updateFinishButton() {
+            const button = document.getElementById('finishButton');
+            const username = document.getElementById('username').value;
+            const isHost = lastSessionState
+                && lastSessionState.hostUsername === username
+                && lastParticipants.some(p => p.username === username && p.role === 'HOST');
+
+            button.disabled = !isHost;
+        }
+
+        function connect() {
+            const ws = new WebSocket('ws://localhost:8080/ws-native', ['v12.stomp']);
+            stompClient = Stomp.over(ws);
+
+            stompClient.connect({}, function (frame) {
+                log('CONNECTED: ' + frame, 'connected');
+
+                const code = document.getElementById('inviteCode').value;
+                if (code) {
+                    stompClient.subscribe('/topic/session/' + code + '/participants', function (message) {
+                        try {
+                            lastParticipants = JSON.parse(message.body);
+                        } catch (e) {
+                            lastParticipants = [];
+                        }
+                        updateFinishButton();
+                        log('RECEIVED participants: ' + message.body, 'msg');
+                    });
+                    stompClient.subscribe('/topic/session/' + code + '/votes', function (message) {
+                        log('RECEIVED votes: ' + message.body, 'msg');
+                    });
+                    stompClient.subscribe('/topic/session/' + code + '/vote-status', function (message) {
+                        log('RECEIVED vote-status: ' + message.body, 'msg');
+                    });
+                    stompClient.subscribe('/topic/session/' + code + '/state', function (message) {
+                        try {
+                            lastSessionState = JSON.parse(message.body);
+                        } catch (e) {
+                            lastSessionState = null;
+                        }
+                        updateFinishButton();
+                        log('RECEIVED state: ' + message.body, 'msg');
+                        if (lastSessionState && lastSessionState.status === 'FINISHED') {
+                            log('SESSION FINISHED: closing local connection', 'error');
+                            disconnect();
+                        }
+                    });
+                    stompClient.subscribe('/topic/session/' + code + '/errors', function (message) {
+                        try {
+                            const error = JSON.parse(message.body);
+                            log('ERROR ' + error.action + ' [' + error.type + ']: ' + error.message, 'error');
+                        } catch (e) {
+                            log('ERROR payload: ' + message.body, 'error');
+                        }
+                    });
+                    log('Subscribed to /topic/session/' + code + '/participants', 'connected');
+                    log('Subscribed to /topic/session/' + code + '/votes', 'connected');
+                    log('Subscribed to /topic/session/' + code + '/vote-status', 'connected');
+                    log('Subscribed to /topic/session/' + code + '/state', 'connected');
+                    log('Subscribed to /topic/session/' + code + '/errors', 'connected');
+                }
+            }, function (error) {
+                log('ERROR: ' + error, 'error');
+            });
+        }
+
+        function joinSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.join', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT join: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function leaveSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.leave', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT leave: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function voteSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value,
+                cardValue: document.getElementById('cardValue').value
+            };
+            stompClient.send('/app/session.vote', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT vote: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function revealVotes() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.reveal', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT reveal: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function resetVotes() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            if (!lastSessionState || !lastSessionState.id) { log('No session state received yet. Join or wait for state update.', 'error'); return; }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value,
+                sessionId: lastSessionState.id
+            };
+            stompClient.send('/app/session.reset-votes', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT reset votes: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function finishSession() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            if (!lastSessionState) { log('No session state received yet.', 'error'); return; }
+            if (lastSessionState.hostUsername !== document.getElementById('username').value) {
+                log('Only the host can finish the session.', 'error');
+                return;
+            }
+            const payload = {
+                inviteCode: document.getElementById('inviteCode').value,
+                username: document.getElementById('username').value
+            };
+            stompClient.send('/app/session.finish', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT finish session: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function disconnect() {
+            if (stompClient) {
+                stompClient.disconnect(function () {
+                    lastSessionState = null;
+                    lastParticipants = [];
+                    updateFinishButton();
+                    log('DISCONNECTED', 'error');
+                });
+            }
+        }
+    </script>
+</body>
+</html>

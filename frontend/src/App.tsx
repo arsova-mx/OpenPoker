@@ -1,9 +1,9 @@
 
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { loader as TokenLoader } from './hooks/useTokenDuration';
 
 import Login from './routes/Login';
-import {action as loginAction} from './routes/Auth';
+import {action as loginAction} from './routes/AuthAction';
 import { action as logoutAction } from './routes/Logout';
 import Register from './routes/Register';
 import Main from './routes/Main';
@@ -35,7 +35,6 @@ import useAuthStore from './store/authStore';
           { 
             index: true,
             element: <Main/>,
-            
           },
           {
             path: 'auth',
@@ -43,22 +42,22 @@ import useAuthStore from './store/authStore';
             action: loginAction,
             children: [
               {
-                index: true
+                index: true,
+                element: <Navigate to="/auth/login" replace />,
               },
               {
                 path:'login',
                 element: <Login/>,
-                
               },
               {
                 path:'register',
-                element: <Register/>
+                element: <Register/>,
               },
               {
                 path: 'logout',
-                action: logoutAction
-              }
-            ]
+                action: logoutAction,
+              },
+            ],
           },
           {
             children:[
@@ -78,9 +77,9 @@ import useAuthStore from './store/authStore';
               }
             ]
           },
-        ]
-      }
-    ]
+        ],
+      },
+    ],
   );
 function App() {
   return (
