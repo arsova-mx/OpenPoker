@@ -3,6 +3,7 @@ package com.openpoker.controller;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.VotingDeckResponse;
+import com.openpoker.entity.DeckValue;
 import com.openpoker.repository.VotingDeckRepository;
 import com.openpoker.service.GameSessionService;
 import jakarta.validation.Valid;
@@ -41,7 +42,15 @@ public class GameSessionController {
 
     @GetMapping
     public List<VotingDeckResponse> getAllDecks() {
-        return votingDeckRepository.findAll().stream().map(deck -> new VotingDeckResponse(deck.getId(), deck.getName())).toList();
+        return votingDeckRepository.findAll().stream()
+                .map(deck -> new VotingDeckResponse(
+                        deck.getId(),
+                        deck.getName(),
+                        deck.getSeriesType() != null ? deck.getSeriesType().name() : null,
+                        deck.getDescription(),
+                        deck.getValues() != null ? deck.getValues().stream().map(DeckValue::getValue).toList() : List.of()
+                ))
+                .toList();
     }
 
     @PostMapping("/{code}/finish")
