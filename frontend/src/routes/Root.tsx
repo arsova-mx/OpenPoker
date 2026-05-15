@@ -1,5 +1,5 @@
 
-import { Outlet, useLoaderData, useSubmit } from "react-router-dom";
+import { Outlet, useLoaderData, useNavigate, useSubmit } from "react-router-dom";
 import { useCallback, useEffect } from "react";
 import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
@@ -9,11 +9,13 @@ export default function Root() {
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const logout = useAuthStore( (state) => state.logout);
     const submit = useSubmit();
+    const navigate = useNavigate();
 
     const handleLogout = useCallback(() => {
         logout();
         submit(null, {action:"/auth/logout", method:"post" });
-    }, [logout, submit]);
+        navigate('/auth/login', { replace: true });
+    }, [logout, submit, navigate]);
  
     useEffect( () => {
 

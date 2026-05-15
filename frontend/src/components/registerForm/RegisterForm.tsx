@@ -15,19 +15,18 @@ import { PasswordInput } from "../ui/PasswordInput";
 const registerSchema = z.object({
         username: z
             .string()
-            .min(1, "Ingrese un nombre de usuario")
-            .trim(),
+            .trim()
+            .min(1, "Ingrese un nombre de usuario"),
         email: z
-            .email("Ingrese un email válido")
-            .trim(),
+            .string()
+            .trim()
+            .email("Ingrese un email válido"),
         password: z
             .string()
-            .min(6, "La contraseña debe tener al menos 6 caracteres")
-            .trim(),
+            .min(6, "La contraseña debe tener al menos 6 caracteres"),
         confirmPassword: z
             .string()
-            .min(6, "La contraseña debe tener al menos 6 caracteres")
-            .trim(),
+            .min(6, "La contraseña debe tener al menos 6 caracteres"),
     }).refine( (data) => data.password === data.confirmPassword, { 
     message: "Las contraseñas no coinciden",
     path: ["confirmPassword"],

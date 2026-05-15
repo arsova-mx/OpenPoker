@@ -44,7 +44,8 @@ const getToken = () => {
 }
 
 const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem('token');
+    localStorage.removeItem('tokenDuration');
 }
 
 export const authService = {
