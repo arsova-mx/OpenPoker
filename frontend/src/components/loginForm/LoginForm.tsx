@@ -45,18 +45,6 @@ export default function LoginForm() {
         try {
             const response = await login(data);
 
-<<<<<<< HEAD
-        const response = await login(data);
-
-        if(response) {
-            const token = response.token;
-            setToken(token);
-            
-            const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
-            
-            loginState(data.username, token, tokenDuration);
-            submit(null, {action:"/auth",method: 'post'});
-=======
             if(response.token !== null) {
                 const token = response.token;
                 setToken(token);
@@ -69,7 +57,6 @@ export default function LoginForm() {
         } catch (error) {
             const message = error instanceof Error ? error.message : "Error al iniciar sesión";
             setServerError(message);
->>>>>>> eb97fa4a88d104abe6a257c59949fa9a1459d359
         }
     }
 

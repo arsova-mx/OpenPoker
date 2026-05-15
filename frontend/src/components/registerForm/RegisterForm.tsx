@@ -37,15 +37,9 @@ export default function RegisterForm() {
 
     const authRegister = authService.register;
     const submit = useSubmit();
-<<<<<<< HEAD
-    const login = authService.login;
     const saveToken = authService.saveToken
-    const loginState = useAuthStore( (state) => state.login);  
-=======
-    const setToken = authService.saveToken
     const loginState = useAuthStore( (state) => state.login);
     const [serverError, setServerError] = useState<string | null>(null);
->>>>>>> eb97fa4a88d104abe6a257c59949fa9a1459d359
 
     const form = useForm<z.infer<typeof registerSchema>>({
             resolver: zodResolver(registerSchema),
@@ -71,12 +65,7 @@ export default function RegisterForm() {
             const token = response.token;
             saveToken(token);
             const tokenDuration = localStorage.getItem("tokenDuration") ?? '';
-<<<<<<< HEAD
         
-=======
-
-            setToken(token);
->>>>>>> eb97fa4a88d104abe6a257c59949fa9a1459d359
             loginState(data.username, token, tokenDuration);
 
             submit(null, { action:'/auth', method: 'post'});
