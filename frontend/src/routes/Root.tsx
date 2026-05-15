@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
 import { toast } from "sonner";
-import { toast } from "sonner";
+
 
 export default function Root() {
     const token = useLoaderData();

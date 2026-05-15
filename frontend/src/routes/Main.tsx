@@ -45,7 +45,7 @@ export default function Main() {
                         <p className="text-sm text-muted-foreground">Tu sesión está activa</p>
                         <p className="text-xs text-muted-foreground">Sesión expira en: {tokenDuration}</p>
                         <Separator />
-                        <Button variant="outline" onClick={handleLogout} className="w-full">
+                        <Button variant="outline" className="w-full">
                             <RiLogoutBoxLine className="size-4" />
                             Página sesiones
                         </Button>
