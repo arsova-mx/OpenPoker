@@ -47,7 +47,7 @@ export default function Main() {
                         <Separator />
                         <Button variant="outline" className="w-full">
                             <RiLogoutBoxLine className="size-4" />
-                            Página sesiones
+                            <Link to='/SessionLobby' >Página sesiones</Link>
                         </Button>
                         <Button variant="outline" onClick={handleLogout} className="w-full">
                             <RiLogoutBoxLine className="size-4" />

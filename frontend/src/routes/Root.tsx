@@ -5,7 +5,6 @@ import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
 import { toast } from "sonner";
 
-
 export default function Root() {
     const token = useLoaderData();
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
@@ -24,9 +23,11 @@ export default function Root() {
             const timeRemaining = getTokenDuration();
 
             setTimeout( () => {
-                submit(null, {action:"/auth/logout", method:"post" });
-                navigate('/auth/login', { replace: true });
-                toast.info("Sesion cerrada.")
+                if(token){
+                    submit(null, {action:"/auth/logout", method:"post" });
+                    navigate('/auth/login', { replace: true });
+                    toast.info("Sesion cerrada.")
+                }
             }, timeRemaining);
         }
 

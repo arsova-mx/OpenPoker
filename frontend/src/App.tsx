@@ -20,7 +20,7 @@ import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
  * TODO: Replace with actual application shell (router, layout, context providers)
  * once development begins.
  */
-  const isAuthenticated = !!sessionStorage.getItem('auth')
+  const isAuthenticated = !!localStorage.getItem('auth')
 
   const router = createBrowserRouter(
     [
@@ -58,6 +58,7 @@ import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
             ],
           },
           {
+            element: <ProtectedRoute isAllowed={isAuthenticated}/>,
             children:[
               {
                 path: 'SessionLobby',
