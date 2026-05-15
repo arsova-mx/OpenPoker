@@ -17,9 +17,12 @@ const registerSchema = z.object({
             .string()
             .trim()
             .min(1, "Ingrese un nombre de usuario"),
+            .trim()
+            .min(1, "Ingrese un nombre de usuario"),
         email: z
-            .email("Ingrese un email válido")
-            .trim(),
+            .string()
+            .trim()
+            .email("Ingrese un email válido"),
         password: z
             .string()
             .trim()

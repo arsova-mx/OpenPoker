@@ -1,6 +1,6 @@
 
-import { Outlet, useLoaderData, useSubmit } from "react-router-dom";
-import { useEffect } from "react";
+import { Outlet, useLoaderData, useNavigate, useSubmit } from "react-router-dom";
+import { useCallback, useEffect } from "react";
 import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
 
@@ -9,11 +9,13 @@ export default function Root() {
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const logout = useAuthStore( (state) => state.logout);
     const submit = useSubmit();
+    const navigate = useNavigate();
 
-    function handleLogout() {
+    const handleLogout = useCallback(() => {
         logout();
         submit(null, {action:"/auth/logout", method:"post" });
-    }
+        navigate('/auth/login', { replace: true });
+    }, [logout, submit, navigate]);
  
     useEffect( () => {
 
@@ -35,7 +37,7 @@ export default function Root() {
 
         return () => clearTimeout(timer);
 
-    } , [token, submit, logout]);
+    } , [token, isAuthenticated, handleLogout]);
 
     return (
         <div className="min-h-dvh bg-background">

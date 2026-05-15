@@ -3,7 +3,7 @@ package com.openpoker.controller;
 import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.VotingDeckResponse;
-import com.openpoker.repository.VotingDeckRepository;
+import com.openpoker.service.CardDeckService;
 import com.openpoker.service.GameSessionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,8 +20,13 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class GameSessionController {
     private final GameSessionService gameSessionService;
+    private final CardDeckService cardDeckService;
 
-    private final VotingDeckRepository  votingDeckRepository;
+    @PostMapping
+    public ResponseEntity<SessionResponse> createWithDefaultDeck(@AuthenticationPrincipal String username, @RequestBody
+    @Valid CreateSessionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSessionWithDefaultDeck(username, request));
+    }
 
     @PostMapping("/{deckId}")
     public ResponseEntity<SessionResponse> createWithDeck(@AuthenticationPrincipal String username, @PathVariable UUID deckId, @RequestBody
@@ -41,7 +46,7 @@ public class GameSessionController {
 
     @GetMapping
     public List<VotingDeckResponse> getAllDecks() {
-        return votingDeckRepository.findAll().stream().map(deck -> new VotingDeckResponse(deck.getId(), deck.getName())).toList();
+        return cardDeckService.getAllDecks();
     }
 
     @PostMapping("/{code}/finish")

@@ -23,7 +23,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
        http.cors(cors -> cors.configurationSource(request -> new CorsConfiguration().applyPermitDefaultValues())).csrf(csrf -> csrf.disable()).authorizeHttpRequests(
-               auth -> auth.requestMatchers("/api/auth/**").permitAll().requestMatchers("/api/**").authenticated().anyRequest().permitAll()).sessionManagement(session ->
+               auth -> auth.requestMatchers("/api/auth/**").permitAll().requestMatchers("/api/card-decks/**").permitAll().requestMatchers("/api/**").authenticated().anyRequest().permitAll()).sessionManagement(session ->
                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
