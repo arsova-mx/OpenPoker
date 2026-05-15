@@ -14,14 +14,13 @@ import SessionLobby from './routes/SessionLobby'
 
 import { Toaster } from 'sonner';
 import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
-import useAuthStore from './store/authStore';
 /**
  * Root application component.
  *
  * TODO: Replace with actual application shell (router, layout, context providers)
  * once development begins.
  */
-  const isAuthenticated = !!useAuthStore((state) => state.isAuthenticated)
+  const isAuthenticated = !!sessionStorage.getItem('auth')
 
   const router = createBrowserRouter(
     [
@@ -77,9 +76,9 @@ import useAuthStore from './store/authStore';
               }
             ]
           },
-        ],
-      },
-    ],
+        ]
+      }
+    ]
   );
 function App() {
   return (

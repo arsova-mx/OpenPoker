@@ -3,6 +3,7 @@ import { Outlet, useLoaderData, useNavigate, useSubmit } from "react-router-dom"
 import { useCallback, useEffect } from "react";
 import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
+import { toast } from "sonner";
 
 export default function Root() {
     const token = useLoaderData();
@@ -15,6 +16,7 @@ export default function Root() {
         logout();
         submit(null, {action:"/auth/logout", method:"post" });
         navigate('/auth/login', { replace: true });
+        toast.info("Cierre de Sesion")
     }, [logout, submit, navigate]);
  
     useEffect( () => {
