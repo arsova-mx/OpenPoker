@@ -8,3 +8,17 @@
  *  - Vote          – a single vote cast by a participant
  *  - CardDeck      – the set of estimation cards (Fibonacci, T-shirt, etc.)
  */
+
+export type LoginRequest = { 
+    username: string, 
+    password: string 
+} 
+export type RegisterRequest = { 
+    username: string, 
+    email:string, 
+    password: string 
+}
+export type AuthResponse = { 
+    token: string, 
+    username: string 
+}
