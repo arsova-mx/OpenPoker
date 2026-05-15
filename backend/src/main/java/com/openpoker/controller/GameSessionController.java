@@ -22,6 +22,12 @@ public class GameSessionController {
     private final GameSessionService gameSessionService;
     private final CardDeckService cardDeckService;
 
+    @PostMapping
+    public ResponseEntity<SessionResponse> createWithDefaultDeck(@AuthenticationPrincipal String username, @RequestBody
+    @Valid CreateSessionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(gameSessionService.createSessionWithDefaultDeck(username, request));
+    }
+
     @PostMapping("/{deckId}")
     public ResponseEntity<SessionResponse> createWithDeck(@AuthenticationPrincipal String username, @PathVariable UUID deckId, @RequestBody
     @Valid CreateSessionRequest request) {
