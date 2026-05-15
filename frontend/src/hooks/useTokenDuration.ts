@@ -22,6 +22,12 @@ export function getAuthToken() {
         return null
     }
 
+    const tokenDuration = getTokenDuration();
+    
+    if (tokenDuration < 0) {
+        return 'EXPIRED';
+    }
+
     return token;
 }
 

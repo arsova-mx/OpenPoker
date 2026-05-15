@@ -39,7 +39,6 @@ import Auth from './routes/Auth';
             children: [
               {
                 index: true,
-                element: <Navigate to="/auth/login" replace />,
               },
               {
                 path:'login',

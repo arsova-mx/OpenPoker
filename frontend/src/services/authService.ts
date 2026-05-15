@@ -34,7 +34,7 @@ const register = async (data: RegisterRequest): Promise<AuthResponse> => {
 const saveToken = (token: string) => {
     localStorage.setItem("token", token);
     const tokenDuration = new Date();
-    tokenDuration.setSeconds(tokenDuration.getSeconds()+3600)
+    tokenDuration.setSeconds(tokenDuration.getSeconds()+10)
     localStorage.setItem('tokenDuration', tokenDuration.toISOString());
 }
 

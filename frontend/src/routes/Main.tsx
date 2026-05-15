@@ -1,6 +1,6 @@
 
 import useAuthStore from "../store/authStore";
-import { Link, useSubmit } from "react-router-dom";
+import { Link, useNavigate, useSubmit } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -22,14 +22,15 @@ function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode
 
 export default function Main() {
     
-    const submit = useSubmit()
-    const username = useAuthStore( (state) => state.username)
-    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
-    const tokenDuration = useAuthStore( (state) => state.tokenDuration)
-    const logout = useAuthStore( (state) => state.logout)
+    const submit = useSubmit();
+    const navigate = useNavigate();
+    const username = useAuthStore( (state) => state.username);
+    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated);
+    const tokenDuration = useAuthStore( (state) => state.tokenDuration);
+
     function handleLogout() {
-        logout();
-        submit(null, {action:"/auth/logout", method:"post" });
+        submit(null, {action:"/auth/logout", method:"post"});
+        navigate('/', { replace: true });
     }
 
     if (isAuthenticated) {
