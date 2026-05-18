@@ -12,6 +12,7 @@
     "format": "prettier --write src"
   },
   "dependencies": {
+    "@base-ui/react": "^1.4.1",
     "@fontsource-variable/montserrat": "^5.2.8",
     "@fontsource-variable/roboto": "^5.2.10",
     "@hookform/resolvers": "^5.2.2",

@@ -1,58 +1,37 @@
-import { Link } from "react-router-dom";
 
 
+import useAuthStore from "@/store/authStore";
+import SessionFormCreate from "./SessionFormCreate";
+import SessionFormJoin from "./SessionFormJoin";
 import { Button } from "../ui/button";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarHeader,
-} from "../ui/sidebar"
 
-import { RiGroupLine, RiSendPlaneLine, RiBarChartBoxLine, RiLogoutBoxLine} from '@remixicon/react'
-import { Input } from "../ui/input";
-
-function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode; step: number; title: string; description: string }) {
-    return (
-        <div className="flex flex-col items-center gap-2 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                {icon}
-            </div>
-            <span className="text-xs font-medium text-muted-foreground">Paso {step}</span>
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
-        </div>
-    );
-}
 
 export default function SessionLobby() {
+    const username = useAuthStore( (state) => state.username);
+    
     return (
         <>
-            <div className="flex min-h-dvh flex-col">
+            <div className="">
             {/* Hero */}
-            <section className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center md:py-24">
-                <div className="mx-auto max-w-2xl">
+            <section className="">
+                <div className="">
                     <h1 className="text-4xl font-heading font-bold tracking-tight text-foreground md:text-5xl lg:text-6xl">
-                        Pagina de sesiones
-                        
+                        Bienvenido {username}
                     </h1>
                     <p className="mt-4 text-base text-muted-foreground md:text-lg">
-                        Crea o únete a una sesion ahora
+                        Crea o únete a una sesión ahora
                     </p>
-
-                    <Input 
-                        placeholder="Nombre de la sesion"
-                    />
-
-                    <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                        <Button asChild size="lg" className="w-full sm:w-auto">
-                            <Link to="auth/register">Crear Sesion</Link>
-                        </Button>
-                        <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
-                            <Link to="auth/login">Unirse a Sesion</Link>
-                        </Button>
-                    </div>
+                    <p className="mt-4 text-base text-muted-foreground md:text">
+                        Crea una sesión
+                    </p>
+                    <SessionFormCreate />
+                    <p className="mt-4 text-base text-muted-foreground md:text">
+                        Únete a una sesión
+                    </p>
+                    <SessionFormJoin />
+                    <Button size="lg" className="w-full sm:w-auto">
+                        Cerrar Sesión
+                    </Button>
                 </div>
             </section>
 

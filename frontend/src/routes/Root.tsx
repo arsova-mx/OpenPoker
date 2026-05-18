@@ -1,12 +1,12 @@
 
-import { Outlet, useLoaderData, useNavigate, useSubmit } from "react-router-dom";
+import { Outlet, useNavigate, useRouteLoaderData, useSubmit } from "react-router-dom";
 import { useEffect } from "react";
 import { getTokenDuration } from "@/hooks/useTokenDuration";
 import useAuthStore from "@/store/authStore";
 import { toast } from "sonner";
 
 export default function Root() {
-    const token = useLoaderData();
+    const token = useRouteLoaderData('root');
     const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
     const submit = useSubmit();
     const navigate = useNavigate();
