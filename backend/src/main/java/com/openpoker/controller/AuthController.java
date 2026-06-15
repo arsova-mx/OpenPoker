@@ -3,6 +3,7 @@ package com.openpoker.controller;
 import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
+import com.openpoker.dto.RegisterResponse;
 import com.openpoker.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,7 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody @Valid RegisterRequest request) {
+    public ResponseEntity<RegisterResponse> register(@RequestBody @Valid RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
     }
 
