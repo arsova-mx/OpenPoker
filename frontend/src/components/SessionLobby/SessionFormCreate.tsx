@@ -11,9 +11,6 @@ export default function SessionFormCreate() {
         { name: "Fibonacci", id:"01"}, { name: "T-shirts", id:"02"}
     ]
     
-    function handleChoice() {
-
-    }
 
     return(
         <div className="w-200">

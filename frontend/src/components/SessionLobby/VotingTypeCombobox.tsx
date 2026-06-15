@@ -6,7 +6,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import { CreateSessionRequest } from "@/types"
+
 import { Item, ItemContent, ItemDescription, ItemTitle } from "../ui/item";
 
 

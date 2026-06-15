@@ -1,6 +1,6 @@
 
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import { checkAuthLoader, loader as TokenLoader } from './hooks/useTokenDuration';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { loader as TokenLoader } from './hooks/useTokenDuration';
 
 import Login from './routes/Login';
 import {action as loginAction} from './routes/AuthAction';
@@ -14,7 +14,7 @@ import SessionLobby from './routes/SessionLobby'
 
 import { Toaster } from 'sonner';
 import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
-import { useEffect } from 'react';
+
 /**
  * Root application component.
  *
