@@ -8,14 +8,11 @@ import { Button } from "../ui/button";
 
 export default function SessionLobby() {
     const username = useAuthStore( (state) => state.username);
-    
     return (
         <>
             <div className="">
-            {/* Hero */}
-            <section className="">
                 <div className="">
-                    <h1 className="text-4xl font-heading font-bold tracking-tight text-foreground md:text-5xl lg:text-6xl">
+                    <h1 className="">
                         Bienvenido {username}
                     </h1>
                     <p className="mt-4 text-base text-muted-foreground md:text-lg">
@@ -33,12 +30,7 @@ export default function SessionLobby() {
                         Cerrar Sesión
                     </Button>
                 </div>
-            </section>
-
-            {/* Footer */}
-            <footer className="border-t px-4 py-6 text-center text-xs text-muted-foreground">
-                Open<span className="font-semibold text-foreground">Poker</span> — Open Source Planning Poker
-            </footer>
+            
         </div>
         </>
     )
