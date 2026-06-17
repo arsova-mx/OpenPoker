@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { connectToSession } from "../../services/websocket";
+import { connectToSession } from "../services/websocket";
 
 export default function SessionPage() {
 

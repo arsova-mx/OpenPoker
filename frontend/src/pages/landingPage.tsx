@@ -1,64 +1,10 @@
-
-import useAuthStore from "../store/authStore";
-import { Link, useNavigate, useSubmit } from "react-router-dom";
+import { RiBarChartBoxLine, RiGroupLine, RiSendPlaneLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { RiGroupLine, RiSendPlaneLine, RiBarChartBoxLine, RiLogoutBoxLine } from "@remixicon/react";
-import ComboboxBasic from '../components/SessionLobby/VotingTypeCombobox'
-function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode; step: number; title: string; description: string }) {
-    return (
-        <div className="flex flex-col items-center gap-2 text-center">
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                {icon}
-            </div>
-            <span className="text-xs font-medium text-muted-foreground">Paso {step}</span>
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
-        </div>
-    );
-}
+import { Link } from "react-router-dom";
 
-export default function Main() {
-    
-    const submit = useSubmit();
-    const navigate = useNavigate();
-    const username = useAuthStore( (state) => state.username);
-    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated);
-    const tokenDuration = useAuthStore( (state) => state.tokenDuration);
+export default function LandingPage() {
 
-    function handleLogout() {
-        submit(null, {action:"/auth/logout", method:"post"});
-        navigate('/', { replace: true });
-    }
-
-    if (isAuthenticated) {
-        return (
-            <div className="flex min-h-dvh flex-col items-center justify-center px-4 py-12">
-                <Card className="w-full max-w-md">
-                    <CardContent className="flex flex-col items-center gap-4 py-8">
-                        <div className="flex size-16 items-center justify-center rounded-full bg-primary/10">
-                            <RiGroupLine className="size-8 text-primary" />
-                        </div>
-                        <h1 className="text-2xl font-heading font-bold">Bienvenido, {username}</h1>
-                        <p className="text-sm text-muted-foreground">Tu sesión está activa</p>
-                        <p className="text-xs text-muted-foreground">Sesión expira en: {tokenDuration}</p>
-                        <Separator />
-                        <ComboboxBasic/>
-                        <Button variant="outline" className="w-full">
-                            <Link to='/SessionLobby' >Página sesiones</Link>
-                        </Button>
-                        <Button variant="outline" onClick={handleLogout} className="w-full">
-                            <RiLogoutBoxLine className="size-4" />
-                            Cerrar Sesión
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    return (
+    return(
         <div className="flex min-h-dvh flex-col">
             {/* Hero */}
             <section className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center md:py-24">
@@ -119,6 +65,18 @@ export default function Main() {
             <footer className="border-t px-4 py-6 text-center text-xs text-muted-foreground">
                 Open<span className="font-semibold text-foreground">Poker</span> — Open Source Planning Poker
             </footer>
+        </div>
+    );
+}
+function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode; step: number; title: string; description: string }) {
+    return (
+        <div className="flex flex-col items-center gap-2 text-center">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                {icon}
+            </div>
+            <span className="text-xs font-medium text-muted-foreground">Paso {step}</span>
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
         </div>
     );
 }
