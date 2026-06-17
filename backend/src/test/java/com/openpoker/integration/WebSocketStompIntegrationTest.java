@@ -4,7 +4,7 @@ import com.openpoker.dto.CreateSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
-import com.openpoker.entity.DeckValue;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 import com.openpoker.entity.VotingDeck;
@@ -277,8 +277,8 @@ class WebSocketStompIntegrationTest {
         VotingDeck deck = VotingDeck.builder()
                 .name("Fibonacci")
                 .build();
-        DeckValue three = DeckValue.builder().value("3").deck(deck).build();
-        DeckValue five = DeckValue.builder().value("5").deck(deck).build();
+        CardValue three = CardValue.builder().value("3").deck(deck).build();
+        CardValue five = CardValue.builder().value("5").deck(deck).build();
         deck.setValues(List.of(three, five));
         return deck;
     }

@@ -34,5 +34,5 @@ public class VotingDeck {
     private String description;
 
     @OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    private List<DeckValue> values;
+    private List<CardValue> values;
 }

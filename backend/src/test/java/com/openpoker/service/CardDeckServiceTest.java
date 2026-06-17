@@ -1,7 +1,8 @@
 package com.openpoker.service;
 
 import com.openpoker.dto.VotingDeckResponse;
-import com.openpoker.entity.DeckValue;
+import com.openpoker.entity.CardValue;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.DeckNotFoundException;
 import com.openpoker.model.CardSeries;
@@ -36,9 +37,9 @@ class CardDeckServiceTest {
                 .seriesType(CardSeries.FIBONACCI)
                 .description("Estimación relativa clásica")
                 .values(List.of(
-                        DeckValue.builder().value("0").build(),
-                        DeckValue.builder().value("1").build(),
-                        DeckValue.builder().value("2").build()
+                        CardValue.builder().value("0").build(),
+                        CardValue.builder().value("1").build(),
+                        CardValue.builder().value("2").build()
                 ))
                 .build();
 
@@ -48,9 +49,9 @@ class CardDeckServiceTest {
                 .seriesType(CardSeries.T_SHIRT)
                 .description("Estimación rápida sin números")
                 .values(List.of(
-                        DeckValue.builder().value("XS").build(),
-                        DeckValue.builder().value("S").build(),
-                        DeckValue.builder().value("M").build()
+                        CardValue.builder().value("XS").build(),
+                        CardValue.builder().value("S").build(),
+                        CardValue.builder().value("M").build()
                 ))
                 .build();
 
@@ -75,9 +76,9 @@ class CardDeckServiceTest {
                 .seriesType(CardSeries.DOT_VOTING)
                 .description("Votación simple de priorización")
                 .values(List.of(
-                        DeckValue.builder().value("1").build(),
-                        DeckValue.builder().value("2").build(),
-                        DeckValue.builder().value("3").build()
+                        CardValue.builder().value("1").build(),
+                        CardValue.builder().value("2").build(),
+                        CardValue.builder().value("3").build()
                 ))
                 .build();
 

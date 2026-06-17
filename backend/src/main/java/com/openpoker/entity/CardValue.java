@@ -12,7 +12,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class DeckValue {
+public class CardValue {
     @Id
     @GeneratedValue
     private UUID id;
@@ -23,4 +23,7 @@ public class DeckValue {
     @ManyToOne
     @JoinColumn(name = "deck_id")
     private VotingDeck deck;
+
+    @Column(nullable = false)
+    private int orderIndex;
 }

@@ -62,11 +62,11 @@ class VoteServiceTest {
                 .id(UUID.randomUUID())
                 .name("Fibonacci")
                 .values(List.of(
-                        DeckValue.builder().value("1").build(),
-                        DeckValue.builder().value("2").build(),
-                        DeckValue.builder().value("3").build(),
-                        DeckValue.builder().value("5").build(),
-                        DeckValue.builder().value("8").build()
+                DeckValue.builder().value("1").build(),
+                DeckValue.builder().value("2").build(),
+                DeckValue.builder().value("3").build(),
+                DeckValue.builder().value("5").build(),
+                DeckValue.builder().value("8").build()
                 ))
                 .build();
 

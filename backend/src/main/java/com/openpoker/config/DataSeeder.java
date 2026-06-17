@@ -1,6 +1,6 @@
 package com.openpoker.config;
 
-import com.openpoker.entity.DeckValue;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
@@ -54,11 +54,11 @@ public class DataSeeder implements CommandLineRunner {
                 .values(new ArrayList<>())
                 .build();
 
-        List<DeckValue> deckValues = values.stream()
-                .map(v -> DeckValue.builder().value(v).deck(deck).build())
+        List<CardValue> CardValues = values.stream()
+                .map(v -> CardValue.builder().value(v).deck(deck).build())
                 .toList();
 
-        deck.setValues(deckValues);
+        deck.setValues(CardValues);
         deckRepository.save(deck);
     }
 }
