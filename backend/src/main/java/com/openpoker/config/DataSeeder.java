@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 @Component
 @RequiredArgsConstructor
@@ -54,11 +55,15 @@ public class DataSeeder implements CommandLineRunner {
                 .values(new ArrayList<>())
                 .build();
 
-        List<CardValue> CardValues = values.stream()
-                .map(v -> CardValue.builder().value(v).deck(deck).build())
+        List<CardValue> cardValues = IntStream.range(0, values.size())
+                .mapToObj(i -> CardValue.builder()
+                        .value(values.get(i))
+                        .orderIndex(i)
+                        .deck(deck)
+                        .build())
                 .toList();
 
-        deck.setValues(CardValues);
+        deck.setValues(cardValues);
         deckRepository.save(deck);
     }
 }

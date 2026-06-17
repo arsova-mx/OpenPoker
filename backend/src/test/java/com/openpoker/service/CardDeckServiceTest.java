@@ -2,7 +2,6 @@ package com.openpoker.service;
 
 import com.openpoker.dto.VotingDeckResponse;
 import com.openpoker.entity.CardValue;
-import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.DeckNotFoundException;
 import com.openpoker.model.CardSeries;

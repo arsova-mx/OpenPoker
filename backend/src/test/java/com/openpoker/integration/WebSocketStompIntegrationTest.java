@@ -277,8 +277,8 @@ class WebSocketStompIntegrationTest {
         VotingDeck deck = VotingDeck.builder()
                 .name("Fibonacci")
                 .build();
-        CardValue three = CardValue.builder().value("3").deck(deck).build();
-        CardValue five = CardValue.builder().value("5").deck(deck).build();
+                CardValue three = CardValue.builder().value("3").orderIndex(0).deck(deck).build();
+                CardValue five = CardValue.builder().value("5").orderIndex(1).deck(deck).build();
         deck.setValues(List.of(three, five));
         return deck;
     }

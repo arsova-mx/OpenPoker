@@ -3,7 +3,7 @@ package com.openpoker.service;
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
-import com.openpoker.entity.DeckValue;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.SessionStatus;
@@ -62,11 +62,11 @@ class VoteServiceTest {
                 .id(UUID.randomUUID())
                 .name("Fibonacci")
                 .values(List.of(
-                DeckValue.builder().value("1").build(),
-                DeckValue.builder().value("2").build(),
-                DeckValue.builder().value("3").build(),
-                DeckValue.builder().value("5").build(),
-                DeckValue.builder().value("8").build()
+                CardValue.builder().value("1").orderIndex(0).build(),
+                CardValue.builder().value("2").orderIndex(1).build(),
+                CardValue.builder().value("3").orderIndex(2).build(),
+                CardValue.builder().value("5").orderIndex(3).build(),
+                CardValue.builder().value("8").orderIndex(4).build()
                 ))
                 .build();
 
