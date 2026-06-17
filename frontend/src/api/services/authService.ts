@@ -1,5 +1,5 @@
-import { LoginRequest, RegisterRequest, AuthResponse } from "../types";
-import { instance } from './APIClient'
+import { LoginRequest, RegisterRequest, AuthResponse } from "../../types";
+import { instance } from '../clients/APIClient'
 import axios from "axios";
 
 

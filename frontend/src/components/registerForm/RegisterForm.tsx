@@ -1,7 +1,7 @@
 import { Link, useSubmit } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { useState } from "react";
-import { authService } from "@/services/authService";
+import { authService } from "@/api/services/authService";
 import * as z from 'zod'
 import { zodResolver } from "@hookform/resolvers/zod";
 import useAuthStore from "@/store/authStore";

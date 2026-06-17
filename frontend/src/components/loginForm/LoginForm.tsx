@@ -2,7 +2,7 @@
 import { useForm, Controller } from "react-hook-form"
 import { useState } from "react"
 import useAuthStore from "@/store/authStore"
-import { authService } from "@/services/authService";
+import { authService } from "@/api/services/authService";
 import { Link, useSubmit } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
