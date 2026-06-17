@@ -16,8 +16,8 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api';
 
 
 export const instance = axios.create({
-    baseURL: API_URL,
-    headers: {
+  baseURL: API_URL,
+  headers: {
     'Content-Type': 'application/json',
   },
 });

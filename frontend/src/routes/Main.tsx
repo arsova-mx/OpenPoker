@@ -1,12 +1,11 @@
 
 import useAuthStore from "../store/authStore";
-import { Link, useSubmit } from "react-router-dom";
+import { Link, useNavigate, useSubmit } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { RiGroupLine, RiSendPlaneLine, RiBarChartBoxLine, RiLogoutBoxLine } from "@remixicon/react";
-
-
+import ComboboxBasic from '../components/SessionLobby/VotingTypeCombobox'
 function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode; step: number; title: string; description: string }) {
     return (
         <div className="flex flex-col items-center gap-2 text-center">
@@ -22,14 +21,15 @@ function FeatureStep({ icon, step, title, description }: { icon: React.ReactNode
 
 export default function Main() {
     
-    const submit = useSubmit()
-    const username = useAuthStore( (state) => state.username)
-    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated)
-    const tokenDuration = useAuthStore( (state) => state.tokenDuration)
-    const logout = useAuthStore( (state) => state.logout)
+    const submit = useSubmit();
+    const navigate = useNavigate();
+    const username = useAuthStore( (state) => state.username);
+    const isAuthenticated = useAuthStore( (state) => state.isAuthenticated);
+    const tokenDuration = useAuthStore( (state) => state.tokenDuration);
+
     function handleLogout() {
-        logout();
-        submit(null, {action:"/auth/logout", method:"post" });
+        submit(null, {action:"/auth/logout", method:"post"});
+        navigate('/', { replace: true });
     }
 
     if (isAuthenticated) {
@@ -44,6 +44,10 @@ export default function Main() {
                         <p className="text-sm text-muted-foreground">Tu sesión está activa</p>
                         <p className="text-xs text-muted-foreground">Sesión expira en: {tokenDuration}</p>
                         <Separator />
+                        <ComboboxBasic/>
+                        <Button variant="outline" className="w-full">
+                            <Link to='/SessionLobby' >Página sesiones</Link>
+                        </Button>
                         <Button variant="outline" onClick={handleLogout} className="w-full">
                             <RiLogoutBoxLine className="size-4" />
                             Cerrar Sesión
@@ -67,7 +71,6 @@ export default function Main() {
                     <p className="mt-4 text-base text-muted-foreground md:text-lg">
                         Estimaciones rápidas, consenso real. La alternativa open source para que tu equipo estime historias de usuario de forma divertida y eficiente.
                     </p>
-
                     <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
                         <Button asChild size="lg" className="w-full sm:w-auto">
                             <Link to="auth/register">Comenzar gratis</Link>

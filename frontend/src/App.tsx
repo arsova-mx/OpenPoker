@@ -1,15 +1,19 @@
 
-import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { loader as TokenLoader } from './hooks/useTokenDuration';
+
 import Login from './routes/Login';
 import {action as loginAction} from './routes/AuthAction';
 import { action as logoutAction } from './routes/Logout';
 import Register from './routes/Register';
 import Main from './routes/Main';
 import Root from './routes/Root';
-import { Toaster } from 'sonner';
 import ErrorGlobal from './routes/ErrorGlobal';
 import Auth from './routes/Auth';
+import SessionLobby from './routes/SessionLobby'
+
+import { Toaster } from 'sonner';
+import { ProtectedRoute } from './components/Wrapper/ProtectedRoute';
 
 /**
  * Root application component.
@@ -17,7 +21,7 @@ import Auth from './routes/Auth';
  * TODO: Replace with actual application shell (router, layout, context providers)
  * once development begins.
  */
-
+  
 
   const router = createBrowserRouter(
     [
@@ -39,7 +43,6 @@ import Auth from './routes/Auth';
             children: [
               {
                 index: true,
-                element: <Navigate to="/auth/login" replace />,
               },
               {
                 path:'login',
@@ -55,9 +58,28 @@ import Auth from './routes/Auth';
               },
             ],
           },
-        ],
-      },
-    ],
+          {
+            element: <ProtectedRoute/>,
+            children:[
+              {
+                path: 'SessionLobby',
+                element: <SessionLobby/>
+              },
+              {
+                path: 'sessions',
+                children: 
+                [
+                  {
+                    path: ':code'
+                  }
+                ]
+              },
+            ]
+          },
+          
+        ]
+      }
+    ]
   );
 function App() {
   return (

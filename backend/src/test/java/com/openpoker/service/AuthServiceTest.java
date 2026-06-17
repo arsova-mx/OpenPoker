@@ -3,6 +3,7 @@ package com.openpoker.service;
 import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
+import com.openpoker.dto.RegisterResponse;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 import com.openpoker.repository.UserRepository;
@@ -16,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.when;
 
@@ -41,11 +43,13 @@ class AuthServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.empty());
         when(userRepository.findByEmail("test@test.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("1234")).thenReturn("encoded-password");
-        when(jwtService.generateToken("user")).thenReturn("token-123");
+        //when(jwtService.generateToken("user")).thenReturn("token-123");
 
-        AuthResponse res = authService.register(req);
+        RegisterResponse res = authService.register(req);
 
-        assertNotNull(res.token());
+        assertNotNull(res);
+        assertEquals("user", res.username());
+        assertEquals("test@test.com",res.email());
     }
 
     @Test

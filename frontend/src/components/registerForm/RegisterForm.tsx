@@ -23,9 +23,11 @@ const registerSchema = z.object({
             .email("Ingrese un email válido"),
         password: z
             .string()
+            .trim()
             .min(6, "La contraseña debe tener al menos 6 caracteres"),
         confirmPassword: z
             .string()
+            .trim()
             .min(6, "La contraseña debe tener al menos 6 caracteres"),
     }).refine( (data) => data.password === data.confirmPassword, { 
     message: "Las contraseñas no coinciden",
