@@ -29,4 +29,11 @@ public class UserService {
             return userRepository.save(user);
     }
 
+        public User getUserById(UUID id){
+        User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("usuario no encontrado con el id: "+ id));
+
+        return user;
+    }
+    
+
 }
