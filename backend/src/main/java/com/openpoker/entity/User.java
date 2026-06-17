@@ -47,4 +47,10 @@ public class User {
     public void preUpdate() {
         updatedAt = Timestamp.from(Instant.now());
     }
+
+    @Column(name="company_name", nullable = true)
+    private String companyName;
+    
+    @Column(name="phone_number", nullable = true)
+    private String phoneNumber;
 }
