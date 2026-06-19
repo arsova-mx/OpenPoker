@@ -104,8 +104,8 @@ class WebSocketStompIntegrationTest {
         SessionResponse created = gameSessionService.createSession("host", new CreateSessionRequest("Sprint Planning"), deck.getId());
         String inviteCode = created.sessionCode();
 
-        String hostToken = jwtService.generateToken("host");
-        String aliceToken = jwtService.generateToken("alice");
+        String hostToken = jwtService.generateToken(host);
+        String aliceToken = jwtService.generateToken(alice);
 
         BlockingQueue<SessionResponse> stateMessages = new LinkedBlockingQueue<>();
         BlockingQueue<VotingResultsResponse> voteMessages = new LinkedBlockingQueue<>();
@@ -206,8 +206,8 @@ class WebSocketStompIntegrationTest {
         session.setStatus(com.openpoker.entity.SessionStatus.WAITING);
         sessionRepository.save(session);
 
-        String hostToken = jwtService.generateToken("host");
-        String aliceToken = jwtService.generateToken("alice");
+        String hostToken = jwtService.generateToken(host);
+        String aliceToken = jwtService.generateToken(alice);
 
         BlockingQueue<Map> errorMessages = new LinkedBlockingQueue<>();
         BlockingQueue<SessionResponse> stateMessages = new LinkedBlockingQueue<>();
