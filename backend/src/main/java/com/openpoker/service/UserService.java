@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import com.openpoker.dto.UpdateProfileRequest;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.UserNotFoundException;
 import com.openpoker.repository.UserRepository;
 
 @Service
@@ -30,7 +31,7 @@ public class UserService {
     }
 
         public User getUserById(UUID id){
-        User user = userRepository.findById(id).orElseThrow(() -> new RuntimeException("usuario no encontrado con el id: "+ id));
+        User user = userRepository.findById(id).orElseThrow(() -> new UserNotFoundException("Usuario no encontrado con el id: "+ id));
 
         return user;
     }

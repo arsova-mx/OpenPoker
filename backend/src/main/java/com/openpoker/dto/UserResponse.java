@@ -6,12 +6,14 @@ import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @NoArgsConstructor
 @AllArgsConstructor
 @Data
+@Builder
 public class UserResponse {
 
     private UUID id;

@@ -1,13 +1,9 @@
 package com.openpoker.controller;
 
-import java.util.Optional;
 import java.util.UUID;
-
-import javax.management.RuntimeErrorException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.openpoker.dto.UpdateProfileRequest;
 import com.openpoker.dto.UserResponse;
 import com.openpoker.entity.User;
-import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
 import com.openpoker.service.UserService;
 
@@ -35,7 +30,7 @@ public class UserController {
 
 
     @PatchMapping("/profile")
-    public ResponseEntity<User> UpdateProfile(
+    public ResponseEntity<UserResponse> UpdateProfile(
             @RequestHeader("Authorization") String bearerToken,
             @RequestBody UpdateProfileRequest request){
         
@@ -51,13 +46,21 @@ public class UserController {
         // 4. Mandamos el ID al servicio
         User updateUser = userService.updateProfile(userId, request);
 
-        return ResponseEntity.ok(updateUser);
+        UserResponse response = UserResponse.builder()
+                .id(updateUser.getId())
+                .username(updateUser.getUsername())
+                .email(updateUser.getEmail())
+                .role(updateUser.getRole())
+                .companyName(updateUser.getCompanyName())
+                .phoneNumber(updateUser.getPhoneNumber())
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getExternalUserProfile(
-            @PathVariable UUID id,
-            @RequestHeader("Authorization") String tokenHeader) {
+            @PathVariable UUID id) {
 
         // 1. Buscas al usuario en la BD (te devuelve el objeto completo con password y fechas)
         User user = userService.getUserById(id);

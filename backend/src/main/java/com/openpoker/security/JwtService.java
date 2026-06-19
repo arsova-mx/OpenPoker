@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.InvalidTokenException;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -93,13 +94,21 @@ public class JwtService {
     }
 
     public UUID extractUserId(String token) {
-        String idStr = Jwts.parserBuilder()
-                .setSigningKey(getKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .get("id", String.class);
-        return UUID.fromString(idStr);
+        try{
+            String idStr = Jwts.parserBuilder()
+                    .setSigningKey(getKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody()
+                    .get("id", String.class);
+            if(idStr == null || idStr.trim().isEmpty()){
+                throw new InvalidTokenException("El token no coentiene un identificador de usuario valido");
+            }
+
+            return UUID.fromString(idStr);
+        } catch (IllegalArgumentException | NullPointerException e){
+            throw new InvalidTokenException("Token invalido o mal estructurado");
+        }
     }
 
     public boolean validateToken(String token) {
