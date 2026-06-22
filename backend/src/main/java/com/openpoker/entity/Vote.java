@@ -19,6 +19,11 @@ public class Vote {
     private UUID id;
 
     @ManyToOne(optional = false)
+    @JoinColumn(name="ticket_id",nullable = false)
+    private Ticket ticket;
+
+    @ManyToOne(optional = false)
+    @JoinColumn(name="user_id", nullable = false)
     private User user;
 
     @Column(nullable = false)
