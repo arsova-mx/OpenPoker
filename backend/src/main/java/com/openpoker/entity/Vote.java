@@ -19,9 +19,6 @@ public class Vote {
     private UUID id;
 
     @ManyToOne(optional = false)
-    private GameSession gameSession;
-
-    @ManyToOne(optional = false)
     private User user;
 
     @Column(nullable = false)
