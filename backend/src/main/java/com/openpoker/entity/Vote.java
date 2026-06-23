@@ -7,7 +7,7 @@ import java.sql.Timestamp;
 import java.util.UUID;
 
 @Entity
-@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"game_session_id", "user_id"}))
+@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "user_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
