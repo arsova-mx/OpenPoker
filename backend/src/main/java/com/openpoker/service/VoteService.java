@@ -7,6 +7,7 @@ import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
+import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
 import jakarta.transaction.Transactional;
@@ -27,10 +28,13 @@ public class VoteService {
     private final VoteRepository voteRepository;
     private final UserRepository userRepository;
     private final ParticipantRepository participantRepository;
+    private final TicketRepository ticketRepository;
 
     @Transactional
-    public VoteResponse submitVote(UUID sessionId, UUID participantId, String value) {
+    public VoteResponse submitVote(UUID sessionId,UUID ticketId, UUID participantId, String value) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
         if(session.getStatus() != SessionStatus.VOTING ) {
             throw new SessionNotInVotingException("Session no esta en Votacion");
@@ -52,7 +56,7 @@ public class VoteService {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        Vote vote = voteRepository.findByGameSessionAndUser(session, participant.getUser()).orElse(null);
+        Vote vote = voteRepository.findByTicketAndUser(ticket, participant.getUser()).orElse(null);
 
         Vote savedVote;
 
@@ -60,12 +64,12 @@ public class VoteService {
             vote.setCardValue(value);
             savedVote = voteRepository.saveAndFlush(vote);
         } else {
-            vote = Vote.builder().gameSession(session).user(participant.getUser()).cardValue(value).build();
+            vote = Vote.builder().ticket(ticket).user(participant.getUser()).cardValue(value).build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
 
         long participantCount = participantRepository.countByGameSession(session);
-        long voteCount = voteRepository.findAllByGameSession(session).size();
+        long voteCount = voteRepository.findAllByTicket(ticket).size();
 
         if (participantCount > 0 && voteCount >= participantCount) {
             session.setStatus(SessionStatus.WAITING);
@@ -75,16 +79,16 @@ public class VoteService {
         return new VoteResponse(participant.getUser().getUsername(), savedVote.getCardValue(), savedVote.getUpdatedAt());
     }
 
-    public VotingResultsResponse getVotes(UUID sessionId, UUID participantId) {
+    public VotingResultsResponse getVotes(UUID sessionId,UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
         Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
 
         if (!participant.getGameSession().getId().equals(sessionId)) {
             throw new UsernameIsNotParticipantSessionException("Participante no pertenece a la sesion");
         }
 
-        List<Vote> votes = voteRepository.findAllByGameSession(session);
+        List<Vote> votes = voteRepository.findAllByTicket(ticket);
 
         List<VoteResponse> response = votes.stream().map(v -> new VoteResponse(v.getUser().getUsername(), session.isVotesRevealed() ? v.getCardValue() : "*", v
                 .getUpdatedAt())).toList();
@@ -92,14 +96,16 @@ public class VoteService {
         return new VotingResultsResponse(session.getSessionCode(), response, session.isVotesRevealed());
     }
 
-    public Map<UUID, Boolean> getVoteStatus(UUID sessionId) {
+    public Map<UUID, Boolean> getVoteStatus(UUID sessionId,UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
         List<Participant> participants = participantRepository.findAllByGameSession(session);
-        Set<UUID> votedUserIds = voteRepository.findAllByGameSession(session).stream()
+        Set<UUID> votedUserIds = voteRepository.findAllByTicket(ticket).stream()
                 .map(vote -> vote.getUser().getId())
                 .collect(java.util.stream.Collectors.toSet());
+  
 
         Map<UUID, Boolean> voteStatus = new HashMap<>();
         for (Participant participant : participants) {
@@ -109,7 +115,7 @@ public class VoteService {
         return voteStatus;
     }
 
-    public VotingResultsResponse revealVotes(UUID sessionId, UUID participantId) {
+    public VotingResultsResponse revealVotes(UUID sessionId, UUID participantId,UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         if (session.getStatus() == SessionStatus.FINISHED) {
@@ -135,25 +141,25 @@ public class VoteService {
 
         sessionRepository.save(session);
 
-        return getVotes(sessionId, participantId);
+        return getVotes(sessionId,ticketId, participantId);
     }
 
-    public VoteResponse castVote(String username, String sessionCode, CastVoteRequest request) {
+    public VoteResponse castVote(String username, String sessionCode,UUID ticketId, CastVoteRequest request) {
         GameSession session = getSessionByCode(sessionCode);
         Participant participant = getParticipant(session, username);
-        return submitVote(session.getId(), participant.getId(), request.cardValue());
+        return submitVote(session.getId(),ticketId, participant.getId(), request.cardValue());
     }
 
-    public VotingResultsResponse getVotes(String sessionCode, String username) {
+    public VotingResultsResponse getVotes(String sessionCode,UUID ticketId, String username) {
         GameSession session = getSessionByCode(sessionCode);
         Participant participant = getParticipant(session, username);
-        return getVotes(session.getId(), participant.getId());
+        return getVotes(session.getId(),ticketId, participant.getId());
     }
 
-    public VotingResultsResponse revealVotes(String username, String sessionCode) {
+    public VotingResultsResponse revealVotes(String username, String sessionCode,UUID ticketId) {
         GameSession session = getSessionByCode(sessionCode);
         Participant participant = getParticipant(session, username);
-        return revealVotes(session.getId(), participant.getId());
+        return revealVotes(session.getId(),ticketId, participant.getId());
     }
 
     private GameSession getSessionByCode(String sessionCode) {
@@ -169,8 +175,9 @@ public class VoteService {
     }
 
     @Transactional
-    public void resetVotes(UUID sessionId, UUID participantId) {
+    public void resetVotes(UUID sessionId,UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
         if(session.getStatus() == SessionStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");
@@ -186,7 +193,7 @@ public class VoteService {
             throw new InsufficientRoleException("Solo el host puede reiniciar la votacion");
         }
 
-        voteRepository.deleteAllByGameSession(session);
+        voteRepository.deleteAllByTicket(ticket);
         session.setVotesRevealed(false);
         session.setStatus(SessionStatus.VOTING);
         sessionRepository.save(session);

@@ -3,20 +3,11 @@ package com.openpoker.service;
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
-import com.openpoker.entity.CardValue;
-import com.openpoker.entity.GameSession;
-import com.openpoker.entity.Participant;
-import com.openpoker.entity.SessionStatus;
-import com.openpoker.entity.User;
-import com.openpoker.entity.Vote;
-import com.openpoker.entity.VotingDeck;
+import com.openpoker.entity.*;
 import com.openpoker.globalexception.InvalidVoteValueException;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.SessionNotInVotingException;
-import com.openpoker.repository.GameSessionRepository;
-import com.openpoker.repository.ParticipantRepository;
-import com.openpoker.repository.UserRepository;
-import com.openpoker.repository.VoteRepository;
+import com.openpoker.repository.*; // Importamos todos los repositorios
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,12 +40,16 @@ class VoteServiceTest {
     @Mock
     VoteRepository voteRepository;
 
+    @Mock
+    TicketRepository ticketRepository; // 🚀 1. AGREGADO: Mock del nuevo repositorio de tickets
+
     @InjectMocks
     VoteService service;
 
     private GameSession session;
     private User user;
     private Participant participant;
+    private Ticket ticket; // 🚀 2. AGREGADO: Atributo de apoyo para el ticket de pruebas
 
     @BeforeEach
     void setUp() {
@@ -85,6 +80,14 @@ class VoteServiceTest {
                 .user(user)
                 .role(Participant.Role.VOTER)
                 .build();
+
+        // 🚀 3. AGREGADO: Inicializamos un objeto Ticket para asociarlo a los escenarios
+        ticket = Ticket.builder()
+                .id(UUID.randomUUID())
+                .gameSession(session)
+                .tittle("Refactorizar base de datos")
+                .description("PR de Votos por ticket")
+                .build();
     }
 
     @Test
@@ -93,13 +96,19 @@ class VoteServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
-        when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
+        
+        // 🔄 CORREGIDO: Cambiado de findByGameSessionAndUser a findByTicketAndUser
+        when(voteRepository.findByTicketAndUser(ticket, user)).thenReturn(Optional.empty());
         when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
-        when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(Vote.builder().gameSession(session).user(user).cardValue("5").build()));
+        
+        // 🔄 CORREGIDO: Cambiado de findAllByGameSession a findAllByTicket
+        when(voteRepository.findAllByTicket(ticket)).thenReturn(List.of(Vote.builder().ticket(ticket).user(user).cardValue("5").build()));
 
-        VoteResponse res = service.castVote("user", "ABC", new CastVoteRequest("5"));
+        // 🔄 CORREGIDO: Pasamos el ticket.getId() como nuevo parámetro requerido
+        VoteResponse res = service.castVote("user", "ABC", ticket.getId(), new CastVoteRequest("5"));
 
         assertEquals("5", res.cardValue());
         assertEquals(SessionStatus.VOTING, session.getStatus());
@@ -111,9 +120,11 @@ class VoteServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
 
-        assertThrows(InvalidVoteValueException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("999")));
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        assertThrows(InvalidVoteValueException.class, () -> service.castVote("user", "ABC", ticket.getId(), new CastVoteRequest("999")));
     }
 
     @Test
@@ -123,27 +134,33 @@ class VoteServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
 
-        assertThrows(SessionNotInVotingException.class, () -> service.castVote("user", "ABC", new CastVoteRequest("5")));
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        assertThrows(SessionNotInVotingException.class, () -> service.castVote("user", "ABC", ticket.getId(), new CastVoteRequest("5")));
     }
 
     @Test
     void castVote_movesSessionToWaitingWhenAllParticipantsVoted() {
         User secondUser = User.builder().id(UUID.randomUUID()).username("user2").build();
-        Vote otherVote = Vote.builder().gameSession(session).user(secondUser).cardValue("3").build();
+        Vote otherVote = Vote.builder().ticket(ticket).user(secondUser).cardValue("3").build();
 
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
-        when(voteRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty());
+        
+        // 🔄 CORREGIDO: Métodos apuntando a Ticket
+        when(voteRepository.findByTicketAndUser(ticket, user)).thenReturn(Optional.empty());
         when(voteRepository.saveAndFlush(any(Vote.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(participantRepository.countByGameSession(session)).thenReturn(2L);
-        when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(otherVote, Vote.builder().gameSession(session).user(user).cardValue("8").build()));
+        when(voteRepository.findAllByTicket(ticket)).thenReturn(List.of(otherVote, Vote.builder().ticket(ticket).user(user).cardValue("8").build()));
         when(sessionRepository.save(session)).thenReturn(session);
 
-        VoteResponse response = service.castVote("user", "ABC", new CastVoteRequest("8"));
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        VoteResponse response = service.castVote("user", "ABC", ticket.getId(), new CastVoteRequest("8"));
 
         assertEquals("8", response.cardValue());
         assertEquals(SessionStatus.WAITING, session.getStatus());
@@ -158,11 +175,15 @@ class VoteServiceTest {
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
         when(sessionRepository.save(session)).thenReturn(session);
-        when(voteRepository.findAllByGameSession(session)).thenReturn(List.of());
+        
+        // 🔄 CORREGIDO: Cambiado a findAllByTicket
+        when(voteRepository.findAllByTicket(ticket)).thenReturn(List.of());
 
-        VotingResultsResponse res = service.revealVotes("user", "ABC");
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        VotingResultsResponse res = service.revealVotes("user", "ABC", ticket.getId());
 
         assertTrue(res.revealed());
         assertEquals(SessionStatus.REVEALED, session.getStatus());
@@ -171,17 +192,20 @@ class VoteServiceTest {
     @Test
     void getVotes_masked_whenNotRevealed() {
         session.setVotesRevealed(false);
-
-        Vote vote = Vote.builder().gameSession(session).user(user).cardValue("5").build();
+        Vote vote = Vote.builder().ticket(ticket).user(user).cardValue("5").build();
 
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
-        when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(vote));
+        
+        // 🔄 CORREGIDO: Cambiado a findAllByTicket
+        when(voteRepository.findAllByTicket(ticket)).thenReturn(List.of(vote));
 
-        VotingResultsResponse res = service.getVotes("ABC", "user");
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        VotingResultsResponse res = service.getVotes("ABC", ticket.getId(), "user");
 
         assertEquals("*", res.votes().get(0).cardValue());
     }
@@ -189,17 +213,20 @@ class VoteServiceTest {
     @Test
     void getVotes_showRealValues() {
         session.setVotesRevealed(true);
-
-        Vote vote = Vote.builder().gameSession(session).user(user).cardValue("5").build();
+        Vote vote = Vote.builder().ticket(ticket).user(user).cardValue("5").build();
 
         when(sessionRepository.findBySessionCode("ABC")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(participantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
-        when(voteRepository.findAllByGameSession(session)).thenReturn(List.of(vote));
+        
+        // 🔄 CORREGIDO: Cambiado a findAllByTicket
+        when(voteRepository.findAllByTicket(ticket)).thenReturn(List.of(vote));
 
-        VotingResultsResponse res = service.getVotes("ABC", "user");
+        // 🔄 CORREGIDO: Añadido ticket.getId()
+        VotingResultsResponse res = service.getVotes("ABC", ticket.getId(), "user");
 
         assertEquals("5", res.votes().get(0).cardValue());
     }
@@ -213,15 +240,18 @@ class VoteServiceTest {
         session.setVotesRevealed(true);
 
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         when(sessionRepository.save(session)).thenReturn(session);
 
         participant.setRole(Participant.Role.HOST);
         participant.setId(participantId);
         when(participantRepository.findById(participantId)).thenReturn(Optional.of(participant));
 
-        service.resetVotes(sessionId, participantId);
+        // 🔄 CORREGIDO: Pasamos ticket.getId() al método resetVotes
+        service.resetVotes(sessionId, ticket.getId(), participantId);
 
-        verify(voteRepository).deleteAllByGameSession(session);
+        // 🔄 CORREGIDO: Verificamos que llame a deleteAllByTicket pasándole el objeto completo ticket
+        verify(voteRepository).deleteAllByTicket(ticket);
         verify(sessionRepository).save(session);
         assertEquals(SessionStatus.VOTING, session.getStatus());
         assertTrue(!session.isVotesRevealed());
@@ -236,11 +266,13 @@ class VoteServiceTest {
         session.setVotesRevealed(true);
 
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(ticketRepository.findById(ticket.getId())).thenReturn(Optional.of(ticket)); // Mock ticket
         participant.setId(participantId);
         when(participantRepository.findById(participantId)).thenReturn(Optional.of(participant));
 
+        // 🔄 CORREGIDO: Añadido ticket.getId()
         InsufficientRoleException ex = assertThrows(InsufficientRoleException.class,
-                () -> service.resetVotes(sessionId, participantId));
+                () -> service.resetVotes(sessionId, ticket.getId(), participantId));
 
         assertEquals("Solo el host puede reiniciar la votacion", ex.getMessage());
     }

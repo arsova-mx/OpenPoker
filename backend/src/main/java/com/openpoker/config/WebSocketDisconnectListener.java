@@ -1,5 +1,6 @@
 package com.openpoker.config;
 
+import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.VoteService;
@@ -35,12 +36,16 @@ public class WebSocketDisconnectListener {
                 UUID sessionId = info.sessionId();
                 gameSessionService.handleDisconnect(info.username(), info.inviteCode());
 
+                SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
+
                 List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode()).stream().map(p -> new WebSocketParticipantResponse(p
                         .getUser().getId(), p.getUser().getUsername(),p.getRole().name())).toList();
 
                 messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", gameSessionService.getSessionByCode(info.inviteCode()));
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/vote-status", voteService.getVoteStatus(sessionId));
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", currentSession);
+                UUID activeTicketId = null;
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/vote-status", 
+                    voteService.getVoteStatus(sessionId, activeTicketId));
             } catch (Exception e) {
                 log.warn("Error cleaning up after disconnect: user={}, error={}",
                         info.username(), e.getMessage());

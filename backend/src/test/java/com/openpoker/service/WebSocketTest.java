@@ -11,6 +11,7 @@ import com.openpoker.globalexception.InvalidVoteValueException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -58,7 +59,13 @@ class WebSocketTest {
     @InjectMocks
     private WebSocketController webSocketController;
 
+    // 🚀 Atributo global para el ticketId de pruebas
+    private UUID ticketId;
 
+    @BeforeEach
+    void setUp() {
+        ticketId = UUID.randomUUID();
+    }
 
     @Test
     void join_broadcastsParticipantsToInviteCodeTopic() {
@@ -72,12 +79,14 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(voteService.getVoteStatus(session.getId())).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.getVoteStatus ahora requiere ticketId (pasa como ticketId)
+        when(voteService.getVoteStatus(session.getId(), ticketId)).thenReturn(Map.of());
         when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.empty(), Optional.of(participant));
 
-        webSocketController.join(Map.of("inviteCode", "ABC123"), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.join(Map.of("inviteCode", "ABC123", "ticketId", ticketId.toString()), headerAccessor);
 
         verify(sessionService).joinSession("alice", "ABC123");
         verify(sessionService).getParticipants("ABC123");
@@ -85,6 +94,8 @@ class WebSocketTest {
         verify(sessionRegistry).register("ws-session-1", session.getId(), participant.getId(), "alice", "ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/participants", (Object) expected);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
+        // 🔄 CORREGIDO: Verificación con ticketId
+        verify(voteService).getVoteStatus(session.getId(), ticketId);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/vote-status", (Object) Map.of());
     }
 
@@ -100,12 +111,14 @@ class WebSocketTest {
 
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(voteService.getVoteStatus(session.getId())).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.getVoteStatus requiere ticketId (pasa como ticketId)
+        when(voteService.getVoteStatus(session.getId(), ticketId)).thenReturn(Map.of());
         when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
         when(userRepository.findByUsername("host")).thenReturn(Optional.of(user));
         when(participantRepository.findByGameSessionAndUser(session, user)).thenReturn(Optional.of(participant));
 
-        webSocketController.join(Map.of("inviteCode", "ABC123"), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.join(Map.of("inviteCode", "ABC123", "ticketId", ticketId.toString()), headerAccessor);
 
         verify(sessionService, never()).joinSession("host", "ABC123");
         verify(sessionRegistry).register("ws-session-1", session.getId(), participant.getId(), "host", "ABC123");
@@ -128,10 +141,12 @@ class WebSocketTest {
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         when(sessionService.getParticipants("ABC123")).thenReturn(participants);
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
-        when(voteService.getVoteStatus(session.getId())).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.getVoteStatus requiere ticketId (pasa como ticketId)
+        when(voteService.getVoteStatus(session.getId(), ticketId)).thenReturn(Map.of());
         when(sessionRepository.findBySessionCode("ABC123")).thenReturn(Optional.of(session));
 
-        webSocketController.leave(Map.of(), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.leave(Map.of("ticketId", ticketId.toString()), headerAccessor);
 
         verify(sessionService).leaveSession("alice", "ABC123");
         verify(sessionService).getParticipants("ABC123");
@@ -152,16 +167,20 @@ class WebSocketTest {
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1", "mallory");
 
         when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
-        when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
-        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.getVotes requiere ticketId
+        when(voteService.getVotes(sessionId, ticketId, participantId)).thenReturn(votingResults);
+        // 🔄 CORREGIDO: voteService.getVoteStatus requiere ticketId
+        when(voteService.getVoteStatus(sessionId, ticketId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
-        webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "5"), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "5", "ticketId", ticketId.toString()), headerAccessor);
 
-        verify(voteService).submitVote(sessionId, participantId, "5");
-        verify(voteService).getVotes(sessionId, participantId);
-        verify(voteService).getVoteStatus(sessionId);
+        // 🔄 CORREGIDO: Se verifica enviando el ticketId
+        verify(voteService).submitVote(sessionId, ticketId, participantId, "5");
+        verify(voteService).getVotes(sessionId, ticketId, participantId);
+        verify(voteService).getVoteStatus(sessionId, ticketId);
         verify(sessionService).getSessionByCode("ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
@@ -178,15 +197,19 @@ class WebSocketTest {
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1", "mallory");
 
         when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
-        when(voteService.revealVotes(sessionId, participantId)).thenReturn(votingResults);
-        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.revealVotes requiere ticketId
+        when(voteService.revealVotes(sessionId, ticketId, participantId)).thenReturn(votingResults);
+        // 🔄 CORREGIDO: voteService.getVoteStatus requiere ticketId
+        when(voteService.getVoteStatus(sessionId, ticketId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
-        webSocketController.reveal(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.reveal(Map.of("inviteCode", "OTHER", "username", "mallory", "ticketId", ticketId.toString()), headerAccessor);
 
-        verify(voteService).revealVotes(sessionId, participantId);
-        verify(voteService).getVoteStatus(sessionId);
+        // 🔄 CORREGIDO: Verificaciones actualizadas
+        verify(voteService).revealVotes(sessionId, ticketId, participantId);
+        verify(voteService).getVoteStatus(sessionId, ticketId);
         verify(sessionService).getSessionByCode("ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
@@ -201,10 +224,12 @@ class WebSocketTest {
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1", "mallory");
 
         when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
-        when(voteService.submitVote(sessionId, participantId, "999")).thenThrow(new InvalidVoteValueException("Valor invalido"));
+        // 🔄 CORREGIDO: voteService.submitVote requiere ticketId
+        when(voteService.submitVote(sessionId, ticketId, participantId, "999")).thenThrow(new InvalidVoteValueException("Valor invalido"));
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
-        webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "999"), headerAccessor);
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
+        webSocketController.vote(Map.of("inviteCode", "OTHER", "username", "mallory", "cardValue", "999", "ticketId", ticketId.toString()), headerAccessor);
 
         verify(messagingTemplate).convertAndSend(
                 "/topic/session/ABC123/errors",
@@ -214,7 +239,8 @@ class WebSocketTest {
                         "message", "Valor invalido"
                 )
         );
-        verify(voteService, never()).getVotes(sessionId, participantId);
+        // 🔄 CORREGIDO: Firma de getVotes con ticketId
+        verify(voteService, never()).getVotes(sessionId, ticketId, participantId);
         verify(sessionService, never()).getSessionByCode("ABC123");
     }
 
@@ -229,20 +255,25 @@ class WebSocketTest {
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1", "mallory");
 
         when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "mallory", "ABC123")));
-        when(voteService.getVotes(sessionId, participantId)).thenReturn(votingResults);
-        when(voteService.getVoteStatus(sessionId)).thenReturn(Map.of());
+        // 🔄 CORREGIDO: voteService.getVotes requiere ticketId
+        when(voteService.getVotes(sessionId, ticketId, participantId)).thenReturn(votingResults);
+        // 🔄 CORREGIDO: voteService.getVoteStatus requiere ticketId
+        when(voteService.getVoteStatus(sessionId, ticketId)).thenReturn(Map.of());
         when(sessionService.getSessionByCode("ABC123")).thenReturn(sessionResponse);
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
 
+        // 🔄 CORREGIDO: Añadimos ticketId al payload
         webSocketController.resetVotes(Map.of(
                 "inviteCode", "OTHER",
                 "username", "mallory",
-                "sessionId", UUID.randomUUID().toString()
+                "sessionId", UUID.randomUUID().toString(),
+                "ticketId", ticketId.toString()
         ), headerAccessor);
 
-        verify(voteService).resetVotes(sessionId, participantId);
-        verify(voteService).getVotes(sessionId, participantId);
-        verify(voteService).getVoteStatus(sessionId);
+        // 🔄 CORREGIDO: Verificaciones actualizadas
+        verify(voteService).resetVotes(sessionId, ticketId, participantId);
+        verify(voteService).getVotes(sessionId, ticketId, participantId);
+        verify(voteService).getVoteStatus(sessionId, ticketId);
         verify(sessionService).getSessionByCode("ABC123");
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/votes", (Object) votingResults);
         verify(messagingTemplate).convertAndSend("/topic/session/ABC123/state", (Object) sessionResponse);
@@ -257,7 +288,9 @@ class WebSocketTest {
         SimpMessageHeaderAccessor headerAccessor = buildHeaderAccessor("ws-session-1", "host");
 
         when(sessionRegistry.get("ws-session-1")).thenReturn(Optional.of(new WebSocketSessionRegistry.SessionInfo(sessionId, participantId, "host", "ABC123")));
-        when(sessionService.finishSession("host", "ABC123")).thenReturn(sessionResponse);
+        @SuppressWarnings("unchecked")
+        Object castedResponse = sessionResponse;
+        when(sessionService.finishSession("host", "ABC123")).thenReturn((SessionResponse) castedResponse);
 
         webSocketController.finish(Map.of("inviteCode", "OTHER", "username", "mallory"), headerAccessor);
 
