@@ -36,7 +36,10 @@ public class Ticket {
 
     @Column(name="description",length = 500)
     private String description;
-
+    /* 
+    @Column(name="average")
+    private CardValue average;
+    */
 
 
 

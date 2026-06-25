@@ -13,6 +13,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Data
 public class Vote {
     @Id
     @GeneratedValue
@@ -26,8 +27,9 @@ public class Vote {
     @JoinColumn(name="user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
-    private String cardValue;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "card_value_id", nullable = false)
+    private CardValue cardValue;
 
     private Timestamp createdAt;
     private Timestamp updatedAt;

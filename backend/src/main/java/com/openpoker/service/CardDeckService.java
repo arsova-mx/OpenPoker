@@ -29,10 +29,8 @@ public class CardDeckService {
     }
 
     private VotingDeckResponse mapToResponse(VotingDeck deck) {
-        List<String> values = deck.getValues() != null
-                ? deck.getValues().stream().map(CardValue::getValue).toList()
-                : List.of();
+        
         String seriesType = deck.getSeriesType() != null ? deck.getSeriesType().name() : null;
-        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription(), values);
+        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription());
     }
 }

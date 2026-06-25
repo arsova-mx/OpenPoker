@@ -52,7 +52,6 @@ public class DataSeeder implements CommandLineRunner {
                 .name(name)
                 .seriesType(seriesType)
                 .description(description)
-                .values(new ArrayList<>())
                 .build();
 
         List<CardValue> cardValues = IntStream.range(0, values.size())
@@ -63,7 +62,6 @@ public class DataSeeder implements CommandLineRunner {
                         .build())
                 .toList();
 
-        deck.setValues(cardValues);
         deckRepository.save(deck);
     }
 }

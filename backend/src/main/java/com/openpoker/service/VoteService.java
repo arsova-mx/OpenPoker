@@ -5,6 +5,7 @@ import com.openpoker.dto.VoteResponse;
 import com.openpoker.dto.VotingResultsResponse;
 import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
+import com.openpoker.repository.CardValueRepository;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
@@ -29,12 +30,15 @@ public class VoteService {
     private final UserRepository userRepository;
     private final ParticipantRepository participantRepository;
     private final TicketRepository ticketRepository;
+    private final CardValueRepository cardValueRepository;
 
     @Transactional
-    public VoteResponse submitVote(UUID sessionId,UUID ticketId, UUID participantId, String value) {
+    public VoteResponse submitVote(UUID sessionId,UUID ticketId, UUID participantId, UUID value) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        CardValue card = cardValueRepository.findById(value).orElseThrow(() -> new IllegalArgumentException("Valor de la carta no encontrado"));
+
 
         if(session.getStatus() != SessionStatus.VOTING ) {
             throw new SessionNotInVotingException("Session no esta en Votacion");
@@ -50,7 +54,8 @@ public class VoteService {
             throw new IllegalStateException("La sesion no tiene deck configurado");
         }
 
-        boolean valid = session.getDeck().getValues().stream().anyMatch(v -> v.getValue().equals(value));
+        
+        boolean valid = session.getDeck().equals(card.getDeck());
 
         if(!valid) {
             throw new InvalidVoteValueException("Valor invalido");
@@ -61,10 +66,10 @@ public class VoteService {
         Vote savedVote;
 
         if (vote != null) {
-            vote.setCardValue(value);
+            vote.setCardValue(card);
             savedVote = voteRepository.saveAndFlush(vote);
         } else {
-            vote = Vote.builder().ticket(ticket).user(participant.getUser()).cardValue(value).build();
+            vote = Vote.builder().ticket(ticket).user(participant.getUser()).cardValue(card).build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
 
@@ -76,7 +81,7 @@ public class VoteService {
             sessionRepository.save(session);
         }
 
-        return new VoteResponse(participant.getUser().getUsername(), savedVote.getCardValue(), savedVote.getUpdatedAt());
+        return new VoteResponse(participant.getUser().getUsername(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
     }
 
     public VotingResultsResponse getVotes(UUID sessionId,UUID ticketId, UUID participantId) {
@@ -90,11 +95,12 @@ public class VoteService {
 
         List<Vote> votes = voteRepository.findAllByTicket(ticket);
 
-        List<VoteResponse> response = votes.stream().map(v -> new VoteResponse(v.getUser().getUsername(), session.isVotesRevealed() ? v.getCardValue() : "*", v
+        List<VoteResponse> response = votes.stream().map(v -> new VoteResponse(v.getUser().getUsername(), session.isVotesRevealed() ? v.getCardValue().getValue() : "*", v
                 .getUpdatedAt())).toList();
 
         return new VotingResultsResponse(session.getSessionCode(), response, session.isVotesRevealed());
     }
+
 
     public Map<UUID, Boolean> getVoteStatus(UUID sessionId,UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId)
@@ -147,7 +153,10 @@ public class VoteService {
     public VoteResponse castVote(String username, String sessionCode,UUID ticketId, CastVoteRequest request) {
         GameSession session = getSessionByCode(sessionCode);
         Participant participant = getParticipant(session, username);
-        return submitVote(session.getId(),ticketId, participant.getId(), request.cardValue());
+
+        UUID cardValueId = UUID.fromString(request.cardValue());
+
+        return submitVote(session.getId(),ticketId, participant.getId(), cardValueId);
     }
 
     public VotingResultsResponse getVotes(String sessionCode,UUID ticketId, String username) {

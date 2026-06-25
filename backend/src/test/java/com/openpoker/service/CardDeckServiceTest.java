@@ -1,7 +1,6 @@
 package com.openpoker.service;
 
 import com.openpoker.dto.VotingDeckResponse;
-import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.DeckNotFoundException;
 import com.openpoker.model.CardSeries;
@@ -35,11 +34,7 @@ class CardDeckServiceTest {
                 .name("Fibonacci")
                 .seriesType(CardSeries.FIBONACCI)
                 .description("Estimación relativa clásica")
-                .values(List.of(
-                        CardValue.builder().value("0").build(),
-                        CardValue.builder().value("1").build(),
-                        CardValue.builder().value("2").build()
-                ))
+                
                 .build();
 
         VotingDeck tShirt = VotingDeck.builder()
@@ -47,11 +42,7 @@ class CardDeckServiceTest {
                 .name("T-Shirt Sizes")
                 .seriesType(CardSeries.T_SHIRT)
                 .description("Estimación rápida sin números")
-                .values(List.of(
-                        CardValue.builder().value("XS").build(),
-                        CardValue.builder().value("S").build(),
-                        CardValue.builder().value("M").build()
-                ))
+                
                 .build();
 
         when(deckRepository.findAll()).thenReturn(List.of(fibonacci, tShirt));
@@ -62,7 +53,7 @@ class CardDeckServiceTest {
         assertEquals("Fibonacci", result.get(0).name());
         assertEquals("FIBONACCI", result.get(0).seriesType());
         assertEquals("Estimación relativa clásica", result.get(0).description());
-        assertEquals(List.of("0", "1", "2"), result.get(0).values());
+       
         assertEquals("T-Shirt Sizes", result.get(1).name());
         assertEquals("T_SHIRT", result.get(1).seriesType());
     }
@@ -74,11 +65,7 @@ class CardDeckServiceTest {
                 .name("Dot Voting")
                 .seriesType(CardSeries.DOT_VOTING)
                 .description("Votación simple de priorización")
-                .values(List.of(
-                        CardValue.builder().value("1").build(),
-                        CardValue.builder().value("2").build(),
-                        CardValue.builder().value("3").build()
-                ))
+               
                 .build();
 
         when(deckRepository.findBySeriesType(CardSeries.DOT_VOTING)).thenReturn(Optional.of(dotVoting));
@@ -87,7 +74,7 @@ class CardDeckServiceTest {
 
         assertEquals("Dot Voting", result.name());
         assertEquals("DOT_VOTING", result.seriesType());
-        assertEquals(List.of("1", "2", "3"), result.values());
+       
     }
 
     @Test

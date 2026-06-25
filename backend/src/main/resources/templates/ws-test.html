@@ -8,6 +8,10 @@
         body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
         h2 { color: #569cd6; }
         input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
+        input { width: 180px; }
+        #jwtToken { width: 350px; border-color: #0e639c; } /* Destacamos el campo del token */
+        #ticketId { width: 280px; }
+        #cardValue { width: 280px; }
         button { cursor: pointer; background: #0e639c; border: none; }
         button:hover { background: #1177bb; }
         #log { background: #111; padding: 12px; margin-top: 12px; max-height: 400px; overflow-y: auto; border-radius: 4px; white-space: pre-wrap; }
@@ -21,11 +25,15 @@
     <h2>OpenPoker — WebSocket STOMP Tester</h2>
 
     <div>
+        <label>Token JWT: <input id="jwtToken" value="" placeholder="Bearer eyJhbGci..."></label>
         <label>Invite Code: <input id="inviteCode" value="" placeholder="ABC123"></label>
         <label>Username: <input id="username" value="" placeholder="testUser"></label>
-        <label>Card Value: <input id="cardValue" value="5" placeholder="5"></label>
     </div>
-    <div style="margin-top:8px">
+    <div style="margin-top: 8px;">
+        <label>Ticket ID (UUID): <input id="ticketId" value="" placeholder="uuid-del-ticket"></label>
+        <label>Card Value (UUID): <input id="cardValue" value="" placeholder="uuid-de-la-carta"></label>
+    </div>
+    <div style="margin-top:16px">
         <button onclick="connect()">Connect</button>
         <button onclick="joinSession()">Join Session</button>
         <button onclick="voteSession()">Vote</button>
@@ -64,7 +72,19 @@
             const ws = new WebSocket('ws://localhost:8080/ws-native', ['v12.stomp']);
             stompClient = Stomp.over(ws);
 
-            stompClient.connect({}, function (frame) {
+            // 🚀 EXTRAEMOS EL TOKEN Y LE ASEGURAMOS EL PREFIJO BEARER
+            let token = document.getElementById('jwtToken').value.trim();
+            if (token && !token.startsWith('Bearer ')) {
+                token = 'Bearer ' + token;
+            }
+
+            // 🚀 INYECTAMOS LA CABECERA DE AUTORIZACIÓN EN LA CONEXIÓN STOMP
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = token;
+            }
+
+            stompClient.connect(headers, function (frame) {
                 log('CONNECTED: ' + frame, 'connected');
 
                 const code = document.getElementById('inviteCode').value;
@@ -138,10 +158,11 @@
 
         function voteSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            
+            // 🚀 CORREGIDO: Enviamos exactamente la estructura mapa (ticketId, cardValue) con sus UUIDs
             const payload = {
-                inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value,
-                cardValue: document.getElementById('cardValue').value
+                ticketId: document.getElementById('ticketId').value.trim(),
+                cardValue: document.getElementById('cardValue').value.trim()
             };
             stompClient.send('/app/session.vote', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT vote: ' + JSON.stringify(payload), 'sent');

@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 @Entity
 @Table(
     name = "card_value",
@@ -26,8 +28,10 @@ public class CardValue {
     @Column(nullable = false)
     private String value;
 
+
     @ManyToOne
     @JoinColumn(name = "deck_id")
+    //@JsonIgnore
     private VotingDeck deck;
 
     @Column(nullable = false)

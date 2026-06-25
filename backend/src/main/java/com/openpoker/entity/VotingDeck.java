@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.Builder;
 
-import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -32,8 +31,4 @@ public class VotingDeck {
 
     @Column(length = 500)
     private String description;
-
-    @OrderBy("orderIndex ASC")
-    @OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    private List<CardValue> values;
 }

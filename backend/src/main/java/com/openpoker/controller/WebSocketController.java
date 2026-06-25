@@ -85,7 +85,7 @@ public class WebSocketController {
     @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-        String cardValue = payload.get("cardValue");
+        UUID cardValue = UUID.fromString(payload.get("cardValue"));
         UUID ticketId = UUID.fromString(payload.get("ticketId"));
 
         try {
