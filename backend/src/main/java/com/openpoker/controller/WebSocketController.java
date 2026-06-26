@@ -121,15 +121,24 @@ public class WebSocketController {
     @MessageMapping("/session.reveal")
     public void reveal(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-        UUID ticketId = UUID.fromString(payload.get("ticketId"));
-
+        
         try {
+            String ticketIdStr = payload.get("ticketId");
+            if (ticketIdStr == null || ticketIdStr.isBlank()) {
+                throw new IllegalArgumentException("El parámetro 'ticketId' es obligatorio en el payload.");
+            }
+            UUID ticketId = UUID.fromString(ticketIdStr);
+
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.revealVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
+            // 🚀 2. CORRECCIÓN DE ORDEN: (sessionId, participantId, ticketId)
+            var revealResults = voteService.revealVotes(sessionInfo.sessionId(), sessionInfo.participantId(), ticketId);
+
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", revealResults);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reveal", ex);
         }
