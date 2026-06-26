@@ -9,6 +9,8 @@ import com.openpoker.service.GameSessionService;
 import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -18,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class WebSocketController {
@@ -54,7 +56,15 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
+
+            if (ticketId != null) {
+                messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
+            } else {
+                log.info("No se envía vote-status porque no hay un ticketId seleccionado en el payload de unión.");
+            }
+
         } catch (RuntimeException ex) {
+            ex.printStackTrace();
             publishError(inviteCode, "session.join", ex);
         }
     }

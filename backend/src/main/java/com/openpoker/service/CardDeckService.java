@@ -1,10 +1,12 @@
 package com.openpoker.service;
 
+import com.openpoker.dto.CardValueResponse;
 import com.openpoker.dto.VotingDeckResponse;
 import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.DeckNotFoundException;
 import com.openpoker.model.CardSeries;
+import com.openpoker.repository.CardValueRepository;
 import com.openpoker.repository.VotingDeckRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CardDeckService {
     private final VotingDeckRepository deckRepository;
+    private final CardValueRepository cardValueRepository;
 
     public List<VotingDeckResponse> getAllDecks() {
         return deckRepository.findAll().stream()
@@ -31,6 +34,11 @@ public class CardDeckService {
     private VotingDeckResponse mapToResponse(VotingDeck deck) {
         
         String seriesType = deck.getSeriesType() != null ? deck.getSeriesType().name() : null;
-        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription());
+
+        List<CardValueResponse> cardResponses = cardValueRepository.findByDeck(deck).stream()
+                .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
+                .toList();
+
+        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription(),cardResponses);
     }
 }

@@ -4,6 +4,10 @@ import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
 import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
+
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -17,10 +21,12 @@ import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GameSessionService {
@@ -31,6 +37,7 @@ public class GameSessionService {
     private final UserRepository userRepository;
     private final SessionCodeGenerator codeGenerator;
     private final VotingDeckRepository deckRepository;
+   
 
     @Transactional
     public SessionResponse createSession(String username, CreateSessionRequest request, UUID deckId) {
@@ -93,6 +100,8 @@ public class GameSessionService {
 
 
     public SessionResponse joinSession(String username, String code) {
+                log.info("join session ---------------------------------------------------------------------");
+
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
@@ -107,9 +116,17 @@ public class GameSessionService {
 
         participantRepository.save(participant);
 
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
-
-        return mapToResponse(session, host.getUsername());
+        String hostUsername = username;
+        if (role != Participant.Role.HOST) {
+            if (session.getHostUserId() == null) {
+                throw new IllegalStateException("La sesión no tiene un Host ID válido asignado.");
+            }
+            User host = userRepository.findById(session.getHostUserId())
+                    .orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
+            hostUsername = host.getUsername();
+        }
+        log.info("si hizo el join bien");
+        return mapToResponse(session, hostUsername);
     }
 
     @Transactional

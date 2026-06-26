@@ -103,6 +103,10 @@ public class VoteService {
 
 
     public Map<UUID, Boolean> getVoteStatus(UUID sessionId,UUID ticketId) {
+        if (ticketId == null) {
+        // En lugar de dejar que busque en el repositorio con null, respondemos un estatus vacío o manejado
+            return new HashMap<>();
+        }
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
         Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));

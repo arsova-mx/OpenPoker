@@ -24,4 +24,5 @@ public class CardDeckController {
     public ResponseEntity<VotingDeckResponse> getDeckByType(@PathVariable CardSeries seriesType) {
         return ResponseEntity.ok(cardDeckService.getDeckBySeriesType(seriesType));
     }
+    
 }
