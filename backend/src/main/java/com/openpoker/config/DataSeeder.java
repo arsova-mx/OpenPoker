@@ -61,7 +61,7 @@ public class DataSeeder implements CommandLineRunner {
                         .deck(deck)
                         .build())
                 .toList();
-
+                
         deckRepository.save(deck);
     }
 }

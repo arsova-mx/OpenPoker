@@ -16,7 +16,7 @@ import java.util.UUID;
 @Data
 public class Vote {
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
     @ManyToOne(optional = false)

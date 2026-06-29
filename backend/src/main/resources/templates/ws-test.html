@@ -158,14 +158,28 @@
 
         function voteSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+
+            const ticketInput = document.getElementById('ticketId').value.trim();
+            const cardInput = document.getElementById('cardValue').value.trim();
+
+            if (!ticketInput || !cardInput) {
+                log('Error: Debes ingresar el Ticket ID y el Card Value', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            setTimeout(() => { btn.disabled = false; }, 1000); // Reactivar en 1 segundo
             
+
             // 🚀 CORREGIDO: Enviamos exactamente la estructura mapa (ticketId, cardValue) con sus UUIDs
             const payload = {
-                ticketId: document.getElementById('ticketId').value.trim(),
-                cardValue: document.getElementById('cardValue').value.trim()
+                ticketId: ticketInput,
+                cardValue: cardInput
             };
             stompClient.send('/app/session.vote', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT vote: ' + JSON.stringify(payload), 'sent');
+            
         }
 
         function revealVotes() {
@@ -211,6 +225,10 @@
                     lastSessionState = null;
                     lastParticipants = [];
                     updateFinishButton();
+
+                    document.getElementById('inviteCode').value = '';
+                    document.getElementById('ticketId').value = '';
+                    
                     log('DISCONNECTED', 'error');
                 });
             }

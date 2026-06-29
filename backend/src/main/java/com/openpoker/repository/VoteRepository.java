@@ -13,6 +13,8 @@ import java.util.UUID;
 
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
+    long countByTicketId(UUID ticketId);
+    Optional<Vote> findByTicketIdAndUserId(UUID ticketId, UUID userId);
     Optional<Vote> findByTicketAndUser(Ticket ticket, User user);
     List<Vote> findAllByTicket(Ticket ticket);
     void deleteAllByTicket(Ticket ticket);

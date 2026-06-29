@@ -11,6 +11,7 @@ import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -95,28 +96,42 @@ public class WebSocketController {
     @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-        UUID cardValue = UUID.fromString(payload.get("cardValue"));
-        UUID ticketId = UUID.fromString(payload.get("ticketId"));
 
         try {
+            String cardValueStr = payload.get("cardValue");
+            String ticketIdStr = payload.get("ticketId");
+
+            if (cardValueStr == null || ticketIdStr == null) {
+                throw new IllegalArgumentException("Faltan parámetros requeridos ('cardValue' o 'ticketId')");
+            }
+
+            UUID cardValue = UUID.fromString(cardValueStr);
+            UUID ticketId = UUID.fromString(ticketIdStr);
+
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            try {
-                voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
-            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-                // Race: concurrent first vote. Retry in a fresh transaction where the existing vote is found and updated.
-                voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
-            }
-
+            // 🚀 EJECUCIÓN LIMPIA DIRECTA
+            voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
             
+            // Notificaciones en tiempo real a la sala
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+            
+        } catch (DataIntegrityViolationException ex) {
+            // 🛡️ ESCUDO ANTI-CARRERAS: 
+            // Si el frontend disparó dos veces el voto simultáneamente, el segundo hilo causará esta excepción de llave única.
+            // Como el primer hilo ya guardó el voto con éxito, simplemente lo ignoramos y no alarmamos al usuario.
+            log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
+            
         } catch (RuntimeException ex) {
+            // Cualquier otro error real se sigue notificando al Frontend
             publishError(inviteCode, "session.vote", ex);
         }
     }
+        
+
 
     @MessageMapping("/session.reveal")
     public void reveal(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {

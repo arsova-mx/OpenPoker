@@ -61,20 +61,33 @@ public class VoteService {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        Vote vote = voteRepository.findByTicketAndUser(ticket, participant.getUser()).orElse(null);
+        System.out.println("----------------------------DEBUG: Buscando voto existente para Ticket: " + ticketId + " y Usuario: " + participant.getUser().getId());
 
+        Vote vote = voteRepository.findByTicketAndUser(ticket, participant.getUser()).orElse(null);
         Vote savedVote;
 
         if (vote != null) {
+            System.out.println("-------------------DEBUG: ¡Voto encontrado! ID: " + vote.getId());
             vote.setCardValue(card);
             savedVote = voteRepository.saveAndFlush(vote);
         } else {
-            vote = Vote.builder().ticket(ticket).user(participant.getUser()).cardValue(card).build();
+            System.out.println("-------------------DEBUG: No se encontró voto previo, creando uno nuevo.");
+            vote = Vote.builder()
+                .ticket(ticket)
+                .user(participant.getUser())
+                .cardValue(card).build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
 
+        // 🚀 SUPER IMPORTANTE: Forzamos a que el conteo se haga de forma limpia
         long participantCount = participantRepository.countByGameSession(session);
-        long voteCount = voteRepository.findAllByTicket(ticket).size();
+        
+        // Obtenemos el conteo directo desde el repositorio en vez de cargar toda la lista en memoria
+        long voteCount = voteRepository.countByTicketId(ticketId);
+
+        if (vote == null) {
+            voteCount++;
+        }
 
         if (participantCount > 0 && voteCount >= participantCount) {
             session.setStatus(SessionStatus.WAITING);
