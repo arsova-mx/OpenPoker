@@ -191,6 +191,8 @@
                 return;
             }
 
+            
+
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
                 username: document.getElementById('username').value,
@@ -203,10 +205,19 @@
         function resetVotes() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
             if (!lastSessionState || !lastSessionState.id) { log('No session state received yet. Join or wait for state update.', 'error'); return; }
+
+            const ticketId = document.getElementById('ticketId').value.trim();
+
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para reiniciar la votación', 'error');
+                return;
+            }
+
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
                 username: document.getElementById('username').value,
-                sessionId: lastSessionState.id
+                sessionId: lastSessionState.id,
+                ticketId: ticketId
             };
             stompClient.send('/app/session.reset-votes', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT reset votes: ' + JSON.stringify(payload), 'sent');

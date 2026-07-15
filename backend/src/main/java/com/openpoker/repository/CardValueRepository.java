@@ -14,7 +14,7 @@ import com.openpoker.entity.VotingDeck;
 public interface CardValueRepository extends JpaRepository<CardValue, UUID>{
     List<CardValue> findByDeck(VotingDeck deck);
 
-    @Query(value = "SELECT * FROM card_value WHERE deck_id = :deckId " +
-       "ORDER BY ABS(weight - :avgWeight) ASC LIMIT 1", nativeQuery = true)
+    @Query("SELECT c FROM CardValue c WHERE c.deck.id = :deckId AND c.weight > 0 " +
+           "ORDER BY ABS(c.weight - :avgWeight) ASC LIMIT 1")
     CardValue findClosestByWeight(@Param("deckId") UUID deckId, @Param("avgWeight") double avgWeight);
 }
