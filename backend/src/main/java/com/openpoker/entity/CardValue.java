@@ -5,6 +5,9 @@ import lombok.*;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
@@ -21,8 +24,11 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 @AllArgsConstructor
 @Builder
 public class CardValue {
+
     @Id
     @GeneratedValue
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(length = 36)
     private UUID id;
 
     @Column(nullable = false)
@@ -36,4 +42,7 @@ public class CardValue {
 
     @Column(nullable = false)
     private Integer orderIndex;
+
+    @Column(name="weight")
+    private Integer weight;
 }

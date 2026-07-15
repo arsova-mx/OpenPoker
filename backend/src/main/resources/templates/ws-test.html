@@ -184,9 +184,17 @@
 
         function revealVotes() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const ticketId = document.getElementById('ticketId').value;
+
+            if (!ticketId) {
+                log('Error: ticketId no encontrado en la UI', 'error');
+                return;
+            }
+
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value
+                username: document.getElementById('username').value,
+                ticketId: ticketId
             };
             stompClient.send('/app/session.reveal', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT reveal: ' + JSON.stringify(payload), 'sent');

@@ -2,6 +2,7 @@ package com.openpoker.service;
 
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
+import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.VotingResultsResponse;
 import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
@@ -137,8 +138,8 @@ public class VoteService {
 
         return voteStatus;
     }
-
-    public VotingResultsResponse revealVotes(UUID sessionId, UUID participantId,UUID ticketId) {
+    @Transactional
+    public VotingRRAverage revealVotes(UUID sessionId, UUID participantId,UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         if (session.getStatus() == SessionStatus.FINISHED) {
@@ -159,12 +160,37 @@ public class VoteService {
             throw new OnlyHostCanRevealVotesException("Solo el host puede revelar");
         }
 
+        List<Vote> votes = voteRepository.findAllByTicketId(ticketId);
+
         session.setVotesRevealed(true);
         session.setStatus(SessionStatus.REVEALED);
 
         sessionRepository.save(session);
 
-        return getVotes(sessionId,ticketId, participantId);
+        // 2. Calcular promedio basado en weight (ignorar peso 0 como '?' o '☕')
+        double avgWeight = votes.stream()
+            .mapToDouble(v -> v.getCardValue().getWeight())
+            .filter(w -> w > 0)
+            .average()
+            .orElse(0.0);
+        
+            // 3. Buscar la carta sugerida más cercana por peso
+        CardValue suggested = cardValueRepository.findClosestByWeight(
+            session.getDeck().getId(), avgWeight);
+
+        // 4. Mapear votos a DTOs
+        List<VoteResponse> voteResponses = votes.stream()
+            .map(v -> new VoteResponse(v.getUser().getUsername(), v.getCardValue().getValue(), v.getUpdatedAt()))
+            .toList();
+
+        // 5. Retornar el nuevo DTO que incluye la sugerencia
+        return new VotingRRAverage(
+            session.getSessionCode(),
+            voteResponses,
+            true,
+            avgWeight,
+            suggested != null ? suggested.getValue() : "N/A"
+        );
     }
 
     public VoteResponse castVote(String username, String sessionCode,UUID ticketId, CastVoteRequest request) {
@@ -182,7 +208,7 @@ public class VoteService {
         return getVotes(session.getId(),ticketId, participant.getId());
     }
 
-    public VotingResultsResponse revealVotes(String username, String sessionCode,UUID ticketId) {
+    public VotingRRAverage revealVotes(String username, String sessionCode,UUID ticketId) {
         GameSession session = getSessionByCode(sessionCode);
         Participant participant = getParticipant(session, username);
         return revealVotes(session.getId(),ticketId, participant.getId());

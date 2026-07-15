@@ -11,6 +11,9 @@ import lombok.Builder;
 import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "voting_deck")
 @Getter
@@ -21,6 +24,8 @@ import java.util.UUID;
 public class VotingDeck {
     @Id
     @GeneratedValue
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @Column(nullable = false)

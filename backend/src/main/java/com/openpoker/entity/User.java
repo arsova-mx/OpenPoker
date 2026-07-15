@@ -7,6 +7,9 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "users")
 @Getter
@@ -16,6 +19,8 @@ import java.util.UUID;
 @Builder
 public class User {
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @Column(unique = true, nullable = false)

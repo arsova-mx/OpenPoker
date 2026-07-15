@@ -18,4 +18,5 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     Optional<Vote> findByTicketAndUser(Ticket ticket, User user);
     List<Vote> findAllByTicket(Ticket ticket);
     void deleteAllByTicket(Ticket ticket);
+    List<Vote> findAllByTicketId(UUID ticketId);
 }

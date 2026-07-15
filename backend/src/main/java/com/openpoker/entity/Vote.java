@@ -6,6 +6,9 @@ import lombok.*;
 import java.sql.Timestamp;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
 @Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "user_id"}))
 @Getter
@@ -17,6 +20,8 @@ import java.util.UUID;
 public class Vote {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @ManyToOne(optional = false)

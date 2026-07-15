@@ -2,6 +2,7 @@ package com.openpoker.controller;
 
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
+import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.VotingResultsResponse;
 import com.openpoker.service.VoteService;
 import jakarta.validation.Valid;
@@ -30,7 +31,7 @@ public class VoteController {
     }
 
     @PostMapping("/reveal")
-    public ResponseEntity<VotingResultsResponse> reveal(@AuthenticationPrincipal String username, @PathVariable String code,@RequestParam UUID ticketId) {
+    public ResponseEntity<VotingRRAverage> reveal(@AuthenticationPrincipal String username, @PathVariable String code,@RequestParam UUID ticketId) {
         return ResponseEntity.ok(service.revealVotes(username, code,ticketId));
     }
 }

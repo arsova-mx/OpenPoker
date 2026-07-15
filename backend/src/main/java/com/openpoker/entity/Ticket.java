@@ -2,6 +2,9 @@ package com.openpoker.entity;
 
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -25,6 +28,8 @@ import lombok.Setter;
 public class Ticket {
 
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @ManyToOne(fetch =FetchType.LAZY)
@@ -36,10 +41,12 @@ public class Ticket {
 
     @Column(name="description",length = 500)
     private String description;
-    /* 
-    @Column(name="average")
-    private CardValue average;
-    */
+    
+    @ManyToOne
+    @JoinColumn(name = "estimated_card_id") // Relación con el catálogo oficial
+    private CardValue estimatedCard;
+
+    private Integer estimatedValue;
 
 
 

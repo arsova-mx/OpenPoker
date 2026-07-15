@@ -26,19 +26,24 @@ public class CardDeckService {
     }
 
     public VotingDeckResponse getDeckBySeriesType(CardSeries seriesType) {
-        VotingDeck deck = deckRepository.findBySeriesType(seriesType)
+        VotingDeck deck = deckRepository.findBySeriesTypeWithCards(seriesType)
                 .orElseThrow(() -> new DeckNotFoundException("Deck no encontrado para tipo: " + seriesType));
         return mapToResponse(deck);
     }
 
     private VotingDeckResponse mapToResponse(VotingDeck deck) {
+        List<CardValueResponse> cardResponses = deck.getCardValues().stream()
+            .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
+            .toList();
+
+        return new VotingDeckResponse(
+            deck.getId(), 
+            deck.getName(), 
+            deck.getSeriesType().name(), 
+            deck.getDescription(), 
+            cardResponses
+    );
         
-        String seriesType = deck.getSeriesType() != null ? deck.getSeriesType().name() : null;
 
-        List<CardValueResponse> cardResponses = cardValueRepository.findByDeck(deck).stream()
-                .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
-                .toList();
-
-        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription(),cardResponses);
     }
 }

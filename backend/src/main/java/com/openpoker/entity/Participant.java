@@ -3,6 +3,10 @@ package com.openpoker.entity;
 import java.sql.Timestamp;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -25,6 +29,8 @@ import lombok.Setter;
 @Builder
 public class Participant {
     @Id
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @ManyToOne(optional = false)
