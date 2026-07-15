@@ -3,10 +3,12 @@ package com.openpoker.controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.openpoker.dto.TicketResponseDTO;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Ticket;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.TicketRepository;
+import com.openpoker.service.TicketService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,9 +30,10 @@ public class TicketController {
 
     private final TicketRepository ticketRepository;
     private final GameSessionRepository sessionRepository;
+    private final TicketService ticketService;
 
     @PostMapping
-    public ResponseEntity<Ticket> createTicket(@RequestBody CreateTicketDTO dto) {
+    public TicketResponseDTO createTicket(@RequestBody CreateTicketDTO dto) {
         GameSession session = sessionRepository.findById(dto.getGameSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("Sesión no encontrada"));
 
@@ -40,8 +43,15 @@ public class TicketController {
                 .description(dto.getDescription())
                 .gameSession(session)
                 .build();
+        
+        Ticket savedTicket = ticketRepository.save(ticket);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(ticketRepository.save(ticket));
+        return new TicketResponseDTO(
+            savedTicket.getId(),
+            savedTicket.getTittle(),
+            savedTicket.getDescription(),
+            savedTicket.getGameSession().getId()
+        );
     }
 
     // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala
