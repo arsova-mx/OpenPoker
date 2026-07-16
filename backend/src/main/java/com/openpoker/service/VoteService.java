@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,6 +33,7 @@ public class VoteService {
     private final ParticipantRepository participantRepository;
     private final TicketRepository ticketRepository;
     private final CardValueRepository cardValueRepository;
+   
 
     @Transactional
     public VoteResponse submitVote(UUID sessionId,UUID ticketId, UUID participantId, UUID value) {
@@ -41,7 +43,7 @@ public class VoteService {
         CardValue card = cardValueRepository.findById(value).orElseThrow(() -> new IllegalArgumentException("Valor de la carta no encontrado"));
 
 
-        if(session.getStatus() != SessionStatus.VOTING ) {
+        if(ticket.getStatus() != TicketStatus.VOTING ) {
             throw new SessionNotInVotingException("Session no esta en Votacion");
         }
 
@@ -91,7 +93,7 @@ public class VoteService {
         }
 
         if (participantCount > 0 && voteCount >= participantCount) {
-            session.setStatus(SessionStatus.WAITING);
+            ticket.setStatus(TicketStatus.WAITING);
             sessionRepository.save(session);
         }
 
@@ -141,12 +143,13 @@ public class VoteService {
     @Transactional
     public VotingRRAverage revealVotes(UUID sessionId, UUID participantId,UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
-        if (session.getStatus() == SessionStatus.FINISHED) {
+        if (ticket.getStatus() == TicketStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");
         }
 
-        if (session.getStatus() != SessionStatus.WAITING) {
+        if (ticket.getStatus() != TicketStatus.WAITING) {
             throw new SessionNotInVotingException("Session aun no ha cerrado la votacion");
         }
 
@@ -163,7 +166,7 @@ public class VoteService {
         List<Vote> votes = voteRepository.findAllByTicketId(ticketId);
 
         session.setVotesRevealed(true);
-        session.setStatus(SessionStatus.REVEALED);
+        ticket.setStatus(TicketStatus.REVEALED);
 
         sessionRepository.save(session);
 
@@ -231,7 +234,7 @@ public class VoteService {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
         Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
-        if(session.getStatus() == SessionStatus.FINISHED) {
+        if(ticket.getStatus() == TicketStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");
         }
 
@@ -247,7 +250,7 @@ public class VoteService {
 
         voteRepository.deleteAllByTicket(ticket);
         session.setVotesRevealed(false);
-        session.setStatus(SessionStatus.VOTING);
+        ticket.setStatus(TicketStatus.VOTING);
         sessionRepository.save(session);
     }
 }

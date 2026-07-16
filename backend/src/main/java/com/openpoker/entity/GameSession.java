@@ -36,8 +36,6 @@ public class GameSession {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     private UUID hostUserId;
 
-    @Enumerated(EnumType.STRING)
-    private SessionStatus status;
 
     private Timestamp createdAt;
     private Timestamp updatedAt;
@@ -49,9 +47,6 @@ public class GameSession {
         }
         createdAt = new Timestamp(System.currentTimeMillis());
         updatedAt = new Timestamp(System.currentTimeMillis());
-        if(status == null) {
-            status = SessionStatus.WAITING;
-        }
     }
 
     @PreUpdate

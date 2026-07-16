@@ -4,13 +4,17 @@ import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.web.bind.support.SessionStatus;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -41,12 +45,27 @@ public class Ticket {
 
     @Column(name="description",length = 500)
     private String description;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TicketStatus status;
+
     
     @ManyToOne
     @JoinColumn(name = "estimated_card_id") // Relación con el catálogo oficial
     private CardValue estimatedCard;
 
     private Integer estimatedValue;
+
+    @PrePersist
+    public void prePersist() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
+        }
+        if (this.status == null) {
+            this.status = TicketStatus.WAITING; // <-- Inicia siempre en WAITING
+        }
+    }
 
 
 

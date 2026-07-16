@@ -22,12 +22,32 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-       http.cors(cors -> cors.configurationSource(request -> new CorsConfiguration().applyPermitDefaultValues())).csrf(csrf -> csrf.disable()).authorizeHttpRequests(
-               auth -> auth.requestMatchers("/api/auth/**").permitAll().requestMatchers("/api/card-decks/**").permitAll().requestMatchers("/api/**").authenticated().anyRequest().permitAll()).sessionManagement(session ->
-               session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
-       http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        http.cors(cors -> cors.configurationSource(request -> {
+            CorsConfiguration config = new CorsConfiguration();
+            config.applyPermitDefaultValues(); // Mantiene los valores por defecto útiles (como headers)
+            
+            // 🚀 PERMITIMOS TODOS LOS MÉTODOS HTTP explícitamente (Incluyendo PATCH y OPTIONS)
+            config.addAllowedMethod("GET");
+            config.addAllowedMethod("POST");
+            config.addAllowedMethod("PUT");
+            config.addAllowedMethod("PATCH");  // <-- ¡Esta es la clave!
+            config.addAllowedMethod("DELETE");
+            config.addAllowedMethod("OPTIONS"); // Requerido para peticiones preflight del navegador
+            
+            return config;
+        }))
+        .csrf(csrf -> csrf.disable())
+        .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/api/card-decks/**").permitAll()
+                .requestMatchers("/api/**").authenticated()
+                .anyRequest().permitAll()
+        )
+        .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+        
+        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
-       return http.build();
+        return http.build();
     }
 
     @Bean

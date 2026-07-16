@@ -65,7 +65,7 @@ public class GameSessionService {
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
 
-            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user.getId()).status(SessionStatus.VOTING).deck(deck).build();
+            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user.getId()).deck(deck).build();
 
             try {
                 session = sessionRepository.saveAndFlush(candidate);
@@ -142,7 +142,7 @@ public class GameSessionService {
             throw new InsufficientRoleException("Solo el host puede finalizar la session");
         }
 
-        session.setStatus(SessionStatus.FINISHED);
+        //session.setStatus(SessionStatus.FINISHED);
         sessionRepository.save(session);
         participantRepository.deleteAllByGameSession(session);
 
@@ -177,7 +177,7 @@ public class GameSessionService {
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
         long count = participantRepository.countByGameSession(session);
 
-        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, session.getStatus().name(), count, session.getCreatedAt());
+        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, count, session.getCreatedAt());
     }
 
     @Transactional

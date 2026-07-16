@@ -1,11 +1,13 @@
 package com.openpoker.controller;
 
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.openpoker.dto.TicketResponseDTO;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Ticket;
+import com.openpoker.entity.TicketStatus;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.service.TicketService;
@@ -18,6 +20,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -67,4 +70,16 @@ public class TicketController {
         private String description;
         private UUID gameSessionId;
     }
+
+    @PatchMapping("/{ticketId}/status")
+    public ResponseEntity<TicketResponseDTO> updateTicketStatus(
+            @PathVariable UUID ticketId, 
+            @RequestParam TicketStatus newStatus) {
+        
+        // Delegamos la lógica al servicio
+        TicketResponseDTO response = ticketService.updateStatus(ticketId, newStatus);
+        
+        return ResponseEntity.ok(response);
+    }
+
 }

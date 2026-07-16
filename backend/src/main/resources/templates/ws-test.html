@@ -36,6 +36,9 @@
     <div style="margin-top:16px">
         <button onclick="connect()">Connect</button>
         <button onclick="joinSession()">Join Session</button>
+        
+        <button style="background: #a31515;" onclick="startTicketVoting()">Start Voting (PATCH)</button>
+        
         <button onclick="voteSession()">Vote</button>
         <button onclick="revealVotes()">Reveal Votes</button>
         <button onclick="resetVotes()">Reset Votes</button>
@@ -146,6 +149,42 @@
             log('SENT join: ' + JSON.stringify(payload), 'sent');
         }
 
+        function startTicketVoting() {
+            const ticketId = document.getElementById('ticketId').value.trim();
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para iniciar la votación.', 'error');
+                return;
+            }
+
+            let token = document.getElementById('jwtToken').value.trim();
+            if (token && !token.startsWith('Bearer ')) {
+                token = 'Bearer ' + token;
+            }
+
+            log('SEND PATCH -> Iniciando votación para ticket: ' + ticketId, 'sent');
+
+            // 🚀 CORRECCIÓN CRÍTICA: Apuntar explícitamente al puerto 8080 del backend
+            fetch(`http://localhost:8080/api/tickets/${ticketId}/status?newStatus=VOTING`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': token,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Código HTTP ' + response.status + ': ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                log('PATCH SUCCESS -> Ticket ahora está en VOTING: ' + JSON.stringify(data), 'connected');
+            })
+            .catch(error => {
+                log('PATCH ERROR -> ' + error.message, 'error');
+            });
+        }
+
         function leaveSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
             const payload = {
@@ -170,16 +209,13 @@
             const btn = event.target;
             btn.disabled = true;
             setTimeout(() => { btn.disabled = false; }, 1000); // Reactivar en 1 segundo
-            
 
-            // 🚀 CORREGIDO: Enviamos exactamente la estructura mapa (ticketId, cardValue) con sus UUIDs
             const payload = {
                 ticketId: ticketInput,
                 cardValue: cardInput
             };
             stompClient.send('/app/session.vote', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT vote: ' + JSON.stringify(payload), 'sent');
-            
         }
 
         function revealVotes() {
@@ -190,8 +226,6 @@
                 log('Error: ticketId no encontrado en la UI', 'error');
                 return;
             }
-
-            
 
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,

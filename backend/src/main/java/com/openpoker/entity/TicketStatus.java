@@ -1,5 +1,5 @@
 package com.openpoker.entity;
 
-public enum SessionStatus {
+public enum TicketStatus {
     WAITING, VOTING, FINISHED, REVEALED
 }
