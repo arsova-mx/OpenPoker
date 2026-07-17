@@ -59,8 +59,21 @@ public class TicketController {
 
     // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala
     @GetMapping("/session/{sessionId}")
-    public ResponseEntity<List<Ticket>> getTicketsBySession(@PathVariable UUID sessionId) {
-        return ResponseEntity.ok(ticketRepository.findByGameSessionId(sessionId));
+    public ResponseEntity<List<TicketResponseDTO>> getTicketsBySession(@PathVariable UUID sessionId) {
+        List<Ticket> tickets = ticketRepository.findByGameSessionId(sessionId);
+
+        // 2. Mapeamos de forma limpia a la lista de DTOs seguros
+        List<TicketResponseDTO> response = tickets.stream()
+                .map(t -> new TicketResponseDTO(
+                    t.getId(),
+                    t.getTittle(),       // Mantén el typo 'getTittle()' si aún está así en tu entidad original
+                    t.getDescription(),
+                    t.getGameSession().getId()
+                ))
+                .toList();
+
+        // 3. Retornamos la lista sanitizada y libre de ciclos JSON
+        return ResponseEntity.ok(response);
     }
 
     // Pequeño DTO interno rápido para mapear el JSON de Postman

@@ -110,8 +110,15 @@ public class VoteService {
 
         List<Vote> votes = voteRepository.findAllByTicket(ticket);
 
-        List<VoteResponse> response = votes.stream().map(v -> new VoteResponse(v.getUser().getUsername(), session.isVotesRevealed() ? v.getCardValue().getValue() : "*", v
-                .getUpdatedAt())).toList();
+        boolean isTicketRevealed = ticket.getStatus() == TicketStatus.REVEALED;
+
+        List<VoteResponse> response = votes.stream()
+            .map(v -> new VoteResponse(
+                v.getUser().getUsername(), 
+                isTicketRevealed ? v.getCardValue().getValue() : "*", // Oculta con '*' si no está revelado
+                v.getUpdatedAt()
+            ))
+            .toList();
 
         return new VotingResultsResponse(session.getSessionCode(), response, session.isVotesRevealed());
     }

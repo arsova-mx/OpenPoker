@@ -66,8 +66,22 @@ public class CommentController {
 
     // 🚀 GET /api/tickets/{ticketId}/comments -> Ver la discusión del ticket
     @GetMapping
-    public ResponseEntity<List<Comments>> getComments(@PathVariable UUID ticketId) {
-        return ResponseEntity.ok(commentRepository.findByTicketIdOrderByCreatedAtAsc(ticketId));
+    public ResponseEntity<List<CommentReponseDTO>> getComments(@PathVariable UUID ticketId) {
+        // 1. Obtenemos las entidades de la base de datos
+        List<Comments> entities = commentRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
+
+        // 2. Las mapeamos de forma limpia al DTO seguro
+        List<CommentReponseDTO> dtoList = entities.stream()
+                .map(c -> new CommentReponseDTO(
+                    c.getId(),
+                    c.getUser().getUsername(),
+                    c.getContent(),
+                    c.getCreatedAt()
+                ))
+                .toList();
+
+        // 3. Devolvemos la lista protegida contra ciclos y fugas de datos
+        return ResponseEntity.ok(dtoList);
     }
 
     @lombok.Data
