@@ -40,6 +40,11 @@ public class VoteService {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+
+        if (!ticket.getGameSession().getId().equals(sessionId)) {
+        throw new IllegalArgumentException("El ticket no pertenece a la sesión proporcionada");
+        }
+
         CardValue card = cardValueRepository.findById(value).orElseThrow(() -> new IllegalArgumentException("Valor de la carta no encontrado"));
 
 
@@ -58,23 +63,20 @@ public class VoteService {
         }
 
         
-        boolean valid = session.getDeck().equals(card.getDeck());
+        boolean valid = session.getDeck().getId().equals(card.getDeck().getId());
 
         if(!valid) {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        System.out.println("----------------------------DEBUG: Buscando voto existente para Ticket: " + ticketId + " y Usuario: " + participant.getUser().getId());
 
         Vote vote = voteRepository.findByTicketAndUser(ticket, participant.getUser()).orElse(null);
         Vote savedVote;
 
         if (vote != null) {
-            System.out.println("-------------------DEBUG: ¡Voto encontrado! ID: " + vote.getId());
             vote.setCardValue(card);
             savedVote = voteRepository.saveAndFlush(vote);
         } else {
-            System.out.println("-------------------DEBUG: No se encontró voto previo, creando uno nuevo.");
             vote = Vote.builder()
                 .ticket(ticket)
                 .user(participant.getUser())
@@ -88,9 +90,6 @@ public class VoteService {
         // Obtenemos el conteo directo desde el repositorio en vez de cargar toda la lista en memoria
         long voteCount = voteRepository.countByTicketId(ticketId);
 
-        if (vote == null) {
-            voteCount++;
-        }
 
         if (participantCount > 0 && voteCount >= participantCount) {
             ticket.setStatus(TicketStatus.WAITING);

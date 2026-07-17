@@ -32,14 +32,19 @@ public class CardDeckService {
     }
 
     private VotingDeckResponse mapToResponse(VotingDeck deck) {
-        List<CardValueResponse> cardResponses = deck.getCardValues().stream()
-            .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
-            .toList();
+            // 🔒 Validación defensiva contra listas nulas
+        List<CardValueResponse> cardResponses = deck.getCardValues() == null 
+            ? List.of() // Si es nulo, asignamos una lista vacía inmutable de Java
+            : deck.getCardValues().stream()
+                .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
+                .toList();
+
+        String seriesType = deck.getSeriesType() != null ? deck.getSeriesType().name() : null;
 
         return new VotingDeckResponse(
             deck.getId(), 
             deck.getName(), 
-            deck.getSeriesType().name(), 
+            seriesType, 
             deck.getDescription(), 
             cardResponses
     );

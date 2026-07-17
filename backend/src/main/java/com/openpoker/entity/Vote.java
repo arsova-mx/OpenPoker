@@ -16,7 +16,6 @@ import org.hibernate.type.SqlTypes;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@Data
 public class Vote {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)

@@ -19,6 +19,8 @@ import com.openpoker.entity.User;
 import com.openpoker.repository.CommentRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.dto.CommentReponseDTO;
+
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,7 +34,7 @@ public class CommentController {
 
     // 🚀 POST /api/tickets/{ticketId}/comments -> Agregar un comentario
     @PostMapping
-    public ResponseEntity<Comments> addComment(
+    public ResponseEntity<CommentReponseDTO> addComment(
             @AuthenticationPrincipal String username,
             @PathVariable UUID ticketId,
             @RequestBody MapCommentDTO dto) {
@@ -48,8 +50,18 @@ public class CommentController {
                 .user(user)
                 .content(dto.getContent())
                 .build();
+        
+        Comments savedComment = commentRepository.save(comment);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(commentRepository.save(comment));
+        CommentReponseDTO response = new CommentReponseDTO(
+        savedComment.getId(), // Este ID ya viene poblado tras el guardado
+        savedComment.getUser().getUsername(),
+        savedComment.getContent(),
+        savedComment.getCreatedAt() // Fecha automática generada por el @PrePersist
+    );
+
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     // 🚀 GET /api/tickets/{ticketId}/comments -> Ver la discusión del ticket

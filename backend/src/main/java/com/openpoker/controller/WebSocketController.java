@@ -56,7 +56,6 @@ public class WebSocketController {
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
 
             if (ticketId != null) {
                 messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
@@ -162,9 +161,16 @@ public class WebSocketController {
     @MessageMapping("/session.reset-votes")
     public void resetVotes(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-        UUID ticketId = UUID.fromString(payload.get("ticketId"));
 
         try {
+            String ticketIdStr = payload.get("ticketId");
+            if (ticketIdStr == null || ticketIdStr.trim().isEmpty()) {
+                throw new IllegalArgumentException("El parámetro ticketId es requerido y no puede estar vacío");
+            }
+
+            UUID ticketId = UUID.fromString(payload.get("ticketId"));
+
+        
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
