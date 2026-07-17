@@ -1,6 +1,7 @@
 package com.openpoker.repository;
 
 import com.openpoker.entity.GameSession;
+import com.openpoker.entity.Ticket;
 import com.openpoker.entity.User;
 import com.openpoker.entity.Vote;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,7 +13,10 @@ import java.util.UUID;
 
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, UUID> {
-    Optional<Vote> findByGameSessionAndUser(GameSession gameSession, User user);
-    List<Vote> findAllByGameSession(GameSession gameSession);
-    void deleteAllByGameSession(GameSession gameSession);
+    long countByTicketId(UUID ticketId);
+    Optional<Vote> findByTicketIdAndUserId(UUID ticketId, UUID userId);
+    Optional<Vote> findByTicketAndUser(Ticket ticket, User user);
+    List<Vote> findAllByTicket(Ticket ticket);
+    void deleteAllByTicket(Ticket ticket);
+    List<Vote> findAllByTicketId(UUID ticketId);
 }

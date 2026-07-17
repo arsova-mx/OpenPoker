@@ -6,8 +6,11 @@ import lombok.*;
 import java.sql.Timestamp;
 import java.util.UUID;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 @Entity
-@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"game_session_id", "user_id"}))
+@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "user_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -15,17 +18,22 @@ import java.util.UUID;
 @Builder
 public class Vote {
     @Id
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.AUTO)
+    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @Column(length = 36)
     private UUID id;
 
     @ManyToOne(optional = false)
-    private GameSession gameSession;
+    @JoinColumn(name="ticket_id",nullable = false)
+    private Ticket ticket;
 
     @ManyToOne(optional = false)
+    @JoinColumn(name="user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
-    private String cardValue;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "card_value_id", nullable = false)
+    private CardValue cardValue;
 
     private Timestamp createdAt;
     private Timestamp updatedAt;

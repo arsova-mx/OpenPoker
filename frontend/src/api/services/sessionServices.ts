@@ -1,6 +1,6 @@
 
 import { CreateSessionRequest, SessionResponse } from "@/types";
-import instance from "./APIClient";
+import instance from "../clients/APIClient";
 
 const createSession = async (data: CreateSessionRequest): Promise<SessionResponse> => {
 

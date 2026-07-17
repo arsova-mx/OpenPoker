@@ -9,6 +9,9 @@ import com.openpoker.service.GameSessionService;
 import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -16,8 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
-
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 public class WebSocketController {
@@ -32,6 +36,7 @@ public class WebSocketController {
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
+        UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
         try {
             String username = resolveUsername(headerAccessor);
 
@@ -51,8 +56,15 @@ public class WebSocketController {
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId()));
+
+            if (ticketId != null) {
+                messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
+            } else {
+                log.info("No se envía vote-status porque no hay un ticketId seleccionado en el payload de unión.");
+            }
+
         } catch (RuntimeException ex) {
+            ex.printStackTrace();
             publishError(inviteCode, "session.join", ex);
         }
     }
@@ -60,6 +72,7 @@ public class WebSocketController {
     @MessageMapping("/session.leave")
     public void leave(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
+        UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
@@ -73,7 +86,7 @@ public class WebSocketController {
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.leave", ex);
         }
@@ -82,38 +95,64 @@ public class WebSocketController {
     @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-        String cardValue = payload.get("cardValue");
 
         try {
+            String cardValueStr = payload.get("cardValue");
+            String ticketIdStr = payload.get("ticketId");
+
+            if (cardValueStr == null || ticketIdStr == null) {
+                throw new IllegalArgumentException("Faltan parámetros requeridos ('cardValue' o 'ticketId')");
+            }
+
+            UUID cardValue = UUID.fromString(cardValueStr);
+            UUID ticketId = UUID.fromString(ticketIdStr);
+
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            try {
-                voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
-            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-                // Race: concurrent first vote. Retry in a fresh transaction where the existing vote is found and updated.
-                voteService.submitVote(sessionInfo.sessionId(), sessionInfo.participantId(), cardValue);
-            }
-
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
+            // 🚀 EJECUCIÓN LIMPIA DIRECTA
+            voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
+            
+            // Notificaciones en tiempo real a la sala
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+            
+        } catch (DataIntegrityViolationException ex) {
+            // 🛡️ ESCUDO ANTI-CARRERAS: 
+            // Si el frontend disparó dos veces el voto simultáneamente, el segundo hilo causará esta excepción de llave única.
+            // Como el primer hilo ya guardó el voto con éxito, simplemente lo ignoramos y no alarmamos al usuario.
+            log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
+            
         } catch (RuntimeException ex) {
+            // Cualquier otro error real se sigue notificando al Frontend
             publishError(inviteCode, "session.vote", ex);
         }
     }
+        
+
 
     @MessageMapping("/session.reveal")
     public void reveal(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
-
+        
         try {
+            String ticketIdStr = payload.get("ticketId");
+            if (ticketIdStr == null || ticketIdStr.isBlank()) {
+                throw new IllegalArgumentException("El parámetro 'ticketId' es obligatorio en el payload.");
+            }
+            UUID ticketId = UUID.fromString(ticketIdStr);
+
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.revealVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
+            // 🚀 2. CORRECCIÓN DE ORDEN: (sessionId, participantId, ticketId)
+            var revealResults = voteService.revealVotes(sessionInfo.sessionId(), sessionInfo.participantId(), ticketId);
+
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", revealResults);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reveal", ex);
         }
@@ -124,13 +163,21 @@ public class WebSocketController {
         String inviteCode = null;
 
         try {
+            String ticketIdStr = payload.get("ticketId");
+            if (ticketIdStr == null || ticketIdStr.trim().isEmpty()) {
+                throw new IllegalArgumentException("El parámetro ticketId es requerido y no puede estar vacío");
+            }
+
+            UUID ticketId = UUID.fromString(payload.get("ticketId"));
+
+        
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            voteService.resetVotes(sessionInfo.sessionId(), sessionInfo.participantId());
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), sessionInfo.participantId()));
+            voteService.resetVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId());
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId()));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.reset-votes", ex);
         }

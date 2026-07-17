@@ -1,6 +1,6 @@
 package com.openpoker.config;
 
-import com.openpoker.entity.DeckValue;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 @Component
 @RequiredArgsConstructor
@@ -51,14 +52,16 @@ public class DataSeeder implements CommandLineRunner {
                 .name(name)
                 .seriesType(seriesType)
                 .description(description)
-                .values(new ArrayList<>())
                 .build();
 
-        List<DeckValue> deckValues = values.stream()
-                .map(v -> DeckValue.builder().value(v).deck(deck).build())
+        List<CardValue> cardValues = IntStream.range(0, values.size())
+                .mapToObj(i -> CardValue.builder()
+                        .value(values.get(i))
+                        .orderIndex(i)
+                        .deck(deck)
+                        .build())
                 .toList();
-
-        deck.setValues(deckValues);
+                
         deckRepository.save(deck);
     }
 }

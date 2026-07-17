@@ -8,6 +8,10 @@
         body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
         h2 { color: #569cd6; }
         input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
+        input { width: 180px; }
+        #jwtToken { width: 350px; border-color: #0e639c; } /* Destacamos el campo del token */
+        #ticketId { width: 280px; }
+        #cardValue { width: 280px; }
         button { cursor: pointer; background: #0e639c; border: none; }
         button:hover { background: #1177bb; }
         #log { background: #111; padding: 12px; margin-top: 12px; max-height: 400px; overflow-y: auto; border-radius: 4px; white-space: pre-wrap; }
@@ -21,13 +25,20 @@
     <h2>OpenPoker — WebSocket STOMP Tester</h2>
 
     <div>
+        <label>Token JWT: <input id="jwtToken" value="" placeholder="Bearer eyJhbGci..."></label>
         <label>Invite Code: <input id="inviteCode" value="" placeholder="ABC123"></label>
         <label>Username: <input id="username" value="" placeholder="testUser"></label>
-        <label>Card Value: <input id="cardValue" value="5" placeholder="5"></label>
     </div>
-    <div style="margin-top:8px">
+    <div style="margin-top: 8px;">
+        <label>Ticket ID (UUID): <input id="ticketId" value="" placeholder="uuid-del-ticket"></label>
+        <label>Card Value (UUID): <input id="cardValue" value="" placeholder="uuid-de-la-carta"></label>
+    </div>
+    <div style="margin-top:16px">
         <button onclick="connect()">Connect</button>
         <button onclick="joinSession()">Join Session</button>
+        
+        <button style="background: #a31515;" onclick="startTicketVoting()">Start Voting (PATCH)</button>
+        
         <button onclick="voteSession()">Vote</button>
         <button onclick="revealVotes()">Reveal Votes</button>
         <button onclick="resetVotes()">Reset Votes</button>
@@ -64,7 +75,19 @@
             const ws = new WebSocket('ws://localhost:8080/ws-native', ['v12.stomp']);
             stompClient = Stomp.over(ws);
 
-            stompClient.connect({}, function (frame) {
+            // 🚀 EXTRAEMOS EL TOKEN Y LE ASEGURAMOS EL PREFIJO BEARER
+            let token = document.getElementById('jwtToken').value.trim();
+            if (token && !token.startsWith('Bearer ')) {
+                token = 'Bearer ' + token;
+            }
+
+            // 🚀 INYECTAMOS LA CABECERA DE AUTORIZACIÓN EN LA CONEXIÓN STOMP
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = token;
+            }
+
+            stompClient.connect(headers, function (frame) {
                 log('CONNECTED: ' + frame, 'connected');
 
                 const code = document.getElementById('inviteCode').value;
@@ -126,6 +149,42 @@
             log('SENT join: ' + JSON.stringify(payload), 'sent');
         }
 
+        function startTicketVoting() {
+            const ticketId = document.getElementById('ticketId').value.trim();
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para iniciar la votación.', 'error');
+                return;
+            }
+
+            let token = document.getElementById('jwtToken').value.trim();
+            if (token && !token.startsWith('Bearer ')) {
+                token = 'Bearer ' + token;
+            }
+
+            log('SEND PATCH -> Iniciando votación para ticket: ' + ticketId, 'sent');
+
+            // 🚀 CORRECCIÓN CRÍTICA: Apuntar explícitamente al puerto 8080 del backend
+            fetch(`http://localhost:8080/api/tickets/${ticketId}/status?newStatus=VOTING`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': token,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Código HTTP ' + response.status + ': ' + response.statusText);
+                }
+                return response.json();
+            })
+            .then(data => {
+                log('PATCH SUCCESS -> Ticket ahora está en VOTING: ' + JSON.stringify(data), 'connected');
+            })
+            .catch(error => {
+                log('PATCH ERROR -> ' + error.message, 'error');
+            });
+        }
+
         function leaveSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
             const payload = {
@@ -138,10 +197,22 @@
 
         function voteSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+
+            const ticketInput = document.getElementById('ticketId').value.trim();
+            const cardInput = document.getElementById('cardValue').value.trim();
+
+            if (!ticketInput || !cardInput) {
+                log('Error: Debes ingresar el Ticket ID y el Card Value', 'error');
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            setTimeout(() => { btn.disabled = false; }, 1000); // Reactivar en 1 segundo
+
             const payload = {
-                inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value,
-                cardValue: document.getElementById('cardValue').value
+                ticketId: ticketInput,
+                cardValue: cardInput
             };
             stompClient.send('/app/session.vote', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT vote: ' + JSON.stringify(payload), 'sent');
@@ -149,9 +220,17 @@
 
         function revealVotes() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+            const ticketId = document.getElementById('ticketId').value;
+
+            if (!ticketId) {
+                log('Error: ticketId no encontrado en la UI', 'error');
+                return;
+            }
+
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value
+                username: document.getElementById('username').value,
+                ticketId: ticketId
             };
             stompClient.send('/app/session.reveal', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT reveal: ' + JSON.stringify(payload), 'sent');
@@ -160,10 +239,19 @@
         function resetVotes() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
             if (!lastSessionState || !lastSessionState.id) { log('No session state received yet. Join or wait for state update.', 'error'); return; }
+
+            const ticketId = document.getElementById('ticketId').value.trim();
+
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para reiniciar la votación', 'error');
+                return;
+            }
+
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
                 username: document.getElementById('username').value,
-                sessionId: lastSessionState.id
+                sessionId: lastSessionState.id,
+                ticketId: ticketId
             };
             stompClient.send('/app/session.reset-votes', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT reset votes: ' + JSON.stringify(payload), 'sent');
@@ -190,6 +278,10 @@
                     lastSessionState = null;
                     lastParticipants = [];
                     updateFinishButton();
+
+                    document.getElementById('inviteCode').value = '';
+                    document.getElementById('ticketId').value = '';
+                    
                     log('DISCONNECTED', 'error');
                 });
             }

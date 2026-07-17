@@ -1,7 +1,7 @@
 package com.openpoker.service;
 
+import com.openpoker.dto.CardValueResponse;
 import com.openpoker.dto.VotingDeckResponse;
-import com.openpoker.entity.DeckValue;
 import com.openpoker.entity.VotingDeck;
 import com.openpoker.globalexception.DeckNotFoundException;
 import com.openpoker.model.CardSeries;
@@ -15,6 +15,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CardDeckService {
     private final VotingDeckRepository deckRepository;
+   
 
     public List<VotingDeckResponse> getAllDecks() {
         return deckRepository.findAll().stream()
@@ -23,16 +24,29 @@ public class CardDeckService {
     }
 
     public VotingDeckResponse getDeckBySeriesType(CardSeries seriesType) {
-        VotingDeck deck = deckRepository.findBySeriesType(seriesType)
+        VotingDeck deck = deckRepository.findBySeriesTypeWithCards(seriesType)
                 .orElseThrow(() -> new DeckNotFoundException("Deck no encontrado para tipo: " + seriesType));
         return mapToResponse(deck);
     }
 
     private VotingDeckResponse mapToResponse(VotingDeck deck) {
-        List<String> values = deck.getValues() != null
-                ? deck.getValues().stream().map(DeckValue::getValue).toList()
-                : List.of();
+            // 🔒 Validación defensiva contra listas nulas
+        List<CardValueResponse> cardResponses = deck.getCardValues() == null 
+            ? List.of() // Si es nulo, asignamos una lista vacía inmutable de Java
+            : deck.getCardValues().stream()
+                .map(card -> new CardValueResponse(card.getId(), card.getValue(), card.getOrderIndex()))
+                .toList();
+
         String seriesType = deck.getSeriesType() != null ? deck.getSeriesType().name() : null;
-        return new VotingDeckResponse(deck.getId(), deck.getName(), seriesType, deck.getDescription(), values);
+
+        return new VotingDeckResponse(
+            deck.getId(), 
+            deck.getName(), 
+            seriesType, 
+            deck.getDescription(), 
+            cardResponses
+    );
+        
+
     }
 }

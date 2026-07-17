@@ -1,6 +1,5 @@
 package com.openpoker.entity;
 
-import java.sql.Timestamp;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -10,7 +9,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
@@ -21,38 +22,54 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "participants")
+@Table(name = "ticket")
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @Builder
-public class Participant {
+public class Ticket {
+
     @Id
     @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
     @Column(length = 36)
     private UUID id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch =FetchType.LAZY)
+    @JoinColumn(name="id_session", nullable = false)
     private GameSession gameSession;
 
-    @ManyToOne(optional = false)
-    private User user;
+    @Column(name="title", nullable = false,length = 255)
+    private String tittle;
+
+    @Column(name="description",length = 500)
+    private String description;
 
     @Enumerated(EnumType.STRING)
-    private Role role;
+    @Column(nullable = false)
+    private TicketStatus status;
 
-    private Timestamp joinedAt;
+    
+    @ManyToOne
+    @JoinColumn(name = "estimated_card_id") // Relación con el catálogo oficial
+    private CardValue estimatedCard;
+
+    private Integer estimatedValue;
 
     @PrePersist
     public void prePersist() {
-        if (id == null) {
-            id = UUID.randomUUID();
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
         }
-        joinedAt = new Timestamp(System.currentTimeMillis());
+        if (this.status == null) {
+            this.status = TicketStatus.WAITING; // <-- Inicia siempre en WAITING
+        }
     }
 
-    public enum Role {
-        HOST, VOTER
-    }
+
+
+
+
+    
+
 }

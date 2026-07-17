@@ -6,10 +6,15 @@ import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import com.openpoker.entity.User;
+import com.openpoker.globalexception.InvalidTokenException;
+
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Date;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -56,13 +61,54 @@ public class JwtService {
 
         return configuredSecret.getBytes(StandardCharsets.UTF_8);
     }
+     /* 
     public String generateToken(String username) {
-        return Jwts.builder().setSubject(username).setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + expiration)).signWith(getKey(),
-                SignatureAlgorithm.HS256).compact();
+        return Jwts.builder()
+            .setSubject(username)
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + expiration))
+            .signWith(getKey(),SignatureAlgorithm.HS256).
+            compact();
     }
+    */
+    
+   
+    public String generateToken(User user) {
+        return Jwts.builder()
+                .setSubject(user.getUsername()) 
+                .claim("id", user.getId().toString()) 
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expiration))
+                .signWith(getKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+    
 
     public String extractUsername(String token) {
-        return Jwts.parserBuilder().setSigningKey(getKey()).build().parseClaimsJws(token).getBody().getSubject();
+        return Jwts.parserBuilder()
+        .setSigningKey(getKey())
+        .build()
+        .parseClaimsJws(token)
+        .getBody()
+        .getSubject();
+    }
+
+    public UUID extractUserId(String token) {
+        try{
+            String idStr = Jwts.parserBuilder()
+                    .setSigningKey(getKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody()
+                    .get("id", String.class);
+            if(idStr == null || idStr.trim().isEmpty()){
+                throw new InvalidTokenException("El token no coentiene un identificador de usuario valido");
+            }
+
+            return UUID.fromString(idStr);
+        } catch (IllegalArgumentException | NullPointerException e){
+            throw new InvalidTokenException("Token invalido o mal estructurado");
+        }
     }
 
     public boolean validateToken(String token) {
