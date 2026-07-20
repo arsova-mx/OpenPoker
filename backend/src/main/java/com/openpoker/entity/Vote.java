@@ -28,8 +28,8 @@ public class Vote {
     private Ticket ticket;
 
     @ManyToOne(optional = false)
-    @JoinColumn(name="user_id", nullable = false)
-    private User user;
+    @JoinColumn(name="participant_id", nullable = false)
+    private Participant participant;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "card_value_id", nullable = false)
