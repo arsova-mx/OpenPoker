@@ -35,11 +35,15 @@ public class Participant {
     private UUID id;
 
     @ManyToOne(optional = false)
+    @JoinColumn(name="game_session_id", nullable = false)
     private GameSession gameSession;
 
     @ManyToOne(optional = true)
     @JoinColumn(name = "user_id", nullable = true)
     private User user;
+
+    @Column(name = "guest_display_name", nullable = true)
+    private String guestDisplayName;
 
     @Enumerated(EnumType.STRING)
     private Role role;
@@ -56,5 +60,12 @@ public class Participant {
 
     public enum Role {
         HOST, VOTER
+    }
+
+    public String getEffectiveName() {
+        if (this.user != null) {
+            return this.user.getUsername();
+        }
+        return this.guestDisplayName != null ? this.guestDisplayName : "Invitado Anónimo";
     }
 }

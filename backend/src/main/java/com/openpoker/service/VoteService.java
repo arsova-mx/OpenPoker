@@ -70,7 +70,7 @@ public class VoteService {
         }
 
 
-        Vote vote = voteRepository.findByTicketAndUser(ticket, participant.getUser()).orElse(null);
+        Vote vote = voteRepository.findByTicketAndParticipant(ticket, participant).orElse(null);
         Vote savedVote;
 
         if (vote != null) {
@@ -79,7 +79,7 @@ public class VoteService {
         } else {
             vote = Vote.builder()
                 .ticket(ticket)
-                .user(participant.getUser())
+                .participant(participant)
                 .cardValue(card).build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
@@ -114,7 +114,7 @@ public class VoteService {
 
         List<VoteResponse> response = votes.stream()
             .map(v -> new VoteResponse(
-                v.getUser().getUsername(), 
+                v.getParticipant().getEffectiveName(), 
                 isTicketRevealed ? v.getCardValue().getValue() : "*", // Oculta con '*' si no está revelado
                 v.getUpdatedAt()
             ))
@@ -135,7 +135,7 @@ public class VoteService {
 
         List<Participant> participants = participantRepository.findAllByGameSession(session);
         Set<UUID> votedUserIds = voteRepository.findAllByTicket(ticket).stream()
-                .map(vote -> vote.getUser().getId())
+                .map(vote -> vote.getParticipant().getId())
                 .collect(java.util.stream.Collectors.toSet());
   
 
@@ -189,7 +189,7 @@ public class VoteService {
 
         // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
-            .map(v -> new VoteResponse(v.getUser().getUsername(), v.getCardValue().getValue(), v.getUpdatedAt()))
+            .map(v -> new VoteResponse(v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
             .toList();
 
         // 5. Retornar el nuevo DTO que incluye la sugerencia
