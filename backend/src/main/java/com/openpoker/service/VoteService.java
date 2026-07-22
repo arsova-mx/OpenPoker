@@ -12,7 +12,7 @@ import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -96,9 +97,9 @@ public class VoteService {
             sessionRepository.save(session);
         }
 
-        return new VoteResponse(participant.getUser().getUsername(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
+        return new VoteResponse(participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
     }
-
+    @Transactional(readOnly = true)
     public VotingResultsResponse getVotes(UUID sessionId,UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
         Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
@@ -113,12 +114,20 @@ public class VoteService {
         boolean isTicketRevealed = ticket.getStatus() == TicketStatus.REVEALED;
 
         List<VoteResponse> response = votes.stream()
-            .map(v -> new VoteResponse(
+        .map(v -> {
+            // 🚀 Muestra el valor real SI ya se reveló la mesa O SI el voto pertenece al participante que consulta
+            boolean isOwnVote = v.getParticipant().getId().equals(participantId);
+            String cardDisplay = (isTicketRevealed || isOwnVote) 
+                    ? v.getCardValue().getValue() 
+                    : "*";
+
+            return new VoteResponse(
                 v.getParticipant().getEffectiveName(), 
-                isTicketRevealed ? v.getCardValue().getValue() : "*", // Oculta con '*' si no está revelado
+                cardDisplay, 
                 v.getUpdatedAt()
-            ))
-            .toList();
+            );
+        })
+        .toList();
 
         return new VotingResultsResponse(session.getSessionCode(), response, session.isVotesRevealed());
     }
@@ -131,17 +140,22 @@ public class VoteService {
         }
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+                
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
         List<Participant> participants = participantRepository.findAllByGameSession(session);
-        Set<UUID> votedUserIds = voteRepository.findAllByTicket(ticket).stream()
+        
+        // 1. Recolectamos los IDs de los PARTICIPANTES que ya votaron
+        Set<UUID> votedParticipantIds = voteRepository.findAllByTicket(ticket).stream()
                 .map(vote -> vote.getParticipant().getId())
-                .collect(java.util.stream.Collectors.toSet());
-  
+                .collect(Collectors.toSet());
 
         Map<UUID, Boolean> voteStatus = new HashMap<>();
+        
+        // 2. Comparamos ID de participante contra ID de participante
         for (Participant participant : participants) {
-            voteStatus.put(participant.getId(), votedUserIds.contains(participant.getUser().getId()));
+            voteStatus.put(participant.getId(), votedParticipantIds.contains(participant.getId())); // 👈 CORRECCIÓN AQUÍ
         }
 
         return voteStatus;
@@ -211,16 +225,14 @@ public class VoteService {
         return submitVote(session.getId(),ticketId, participant.getId(), cardValueId);
     }
 
-    public VotingResultsResponse getVotes(String sessionCode,UUID ticketId, String username) {
+    public VotingResultsResponse getVotes(String sessionCode,UUID ticketId, UUID participantId) {
         GameSession session = getSessionByCode(sessionCode);
-        Participant participant = getParticipant(session, username);
-        return getVotes(session.getId(),ticketId, participant.getId());
+        return getVotes(session.getId(),ticketId, participantId);
     }
 
-    public VotingRRAverage revealVotes(String username, String sessionCode,UUID ticketId) {
+    public VotingRRAverage revealVotes(UUID participantId, String sessionCode,UUID ticketId) {
         GameSession session = getSessionByCode(sessionCode);
-        Participant participant = getParticipant(session, username);
-        return revealVotes(session.getId(),ticketId, participant.getId());
+        return revealVotes(session.getId(),participantId,ticketId);
     }
 
     private GameSession getSessionByCode(String sessionCode) {

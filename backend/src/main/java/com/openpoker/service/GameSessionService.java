@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
+import com.openpoker.dto.JoinSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
@@ -99,35 +100,61 @@ public class GameSessionService {
     }
 
 
-    public SessionResponse joinSession(String username, String code) {
-                log.info("join session ---------------------------------------------------------------------");
+    public SessionResponse joinSession(JoinSessionRequest request) {
+        GameSession session = sessionRepository.findBySessionCode(request.code())
+            .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        Participant participant;
 
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+        // CASO 1: Es Usuario Registrado (trae username)
+        if (request.username() != null && !request.username().isBlank()) {
+            User user = userRepository.findByUsername(request.username())
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
-        if(participantRepository.findByGameSessionAndUser(session, user).isPresent()) {
-            throw new UserAlreadyInSessionException("El usuario ya esta en la session");
+            if (participantRepository.findByGameSessionAndUser(session, user).isPresent()) {
+                throw new UserAlreadyInSessionException("El usuario ya esta en la session");
+            }
+
+        Participant.Role role = (session.getHostUserId() != null && session.getHostUserId().equals(user.getId())) 
+                ? Participant.Role.HOST 
+                : Participant.Role.VOTER;
+
+        participant = Participant.builder()
+                .gameSession(session)
+                .user(user)
+                .guestDisplayName(null)
+                .role(role)
+                .build();
+
+    // CASO 2: Es Invitado (trae guestName)
+        } else if (request.guestName() != null && !request.guestName().isBlank()) {
+            participant = Participant.builder()
+                    .gameSession(session)
+                    .user(null) // 👈 user va NULL
+                    .guestDisplayName(request.guestName())
+                    .role(Participant.Role.VOTER) // Los invitados siempre entran como VOTER (el host siempre es el creador)
+                    .build();
+        } else {
+            throw new IllegalArgumentException("Debe proporcionar un usuario registrado o un nombre de invitado.");
         }
-
-        Participant.Role role = session.getHostUserId().equals(user.getId()) ? Participant.Role.HOST : Participant.Role.VOTER;
-
-        Participant participant = Participant.builder().gameSession(session).user(user).role(role).build();
 
         participantRepository.save(participant);
 
-        String hostUsername = username;
-        if (role != Participant.Role.HOST) {
-            if (session.getHostUserId() == null) {
-                throw new IllegalStateException("La sesión no tiene un Host ID válido asignado.");
-            }
-            User host = userRepository.findById(session.getHostUserId())
-                    .orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
-            hostUsername = host.getUsername();
+        // Obtener el nombre del Host para la respuesta (usando participant o user)
+        String hostName = getHostDisplayName(session);
+
+        return mapToResponse(session, hostName);
+}
+
+    // Helper para obtener el nombre del Host sin asumir que es un User
+    private String getHostDisplayName(GameSession session) {
+        if (session.getHostUserId() == null) {
+            return "Host Anónimo";
         }
-        log.info("si hizo el join bien");
-        return mapToResponse(session, hostUsername);
-    }
+        return userRepository.findById(session.getHostUserId())
+                .map(User::getUsername)
+                .orElse("Host");
+        }
 
     @Transactional
     public SessionResponse finishSession(String username, String code) {

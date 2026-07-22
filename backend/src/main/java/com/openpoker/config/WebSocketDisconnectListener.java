@@ -38,8 +38,15 @@ public class WebSocketDisconnectListener {
 
                 SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
 
-                List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode()).stream().map(p -> new WebSocketParticipantResponse(p
-                        .getUser().getId(), p.getUser().getUsername(),p.getRole().name())).toList();
+                List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode())
+                    .stream()
+                    .map(p -> new WebSocketParticipantResponse(
+                            p.getId(),               // 👈 En lugar de p.getUser().getId()
+                            p.getEffectiveName(),   // 👈 En lugar de p.getUser().getUsername()
+                            p.getRole() != null ? p.getRole().name() : "",
+                            p.getUser() == null      // 👈 isGuest (si actualizaste el DTO a 4 campos)
+                    ))
+                    .toList();
 
                 messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
                 messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", currentSession);

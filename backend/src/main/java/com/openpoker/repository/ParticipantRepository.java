@@ -16,4 +16,5 @@ public interface ParticipantRepository extends JpaRepository<Participant, UUID> 
     java.util.List<Participant> findAllByGameSession(GameSession gameSession);
     long countByGameSession(GameSession gameSession);
     void deleteAllByGameSession(GameSession gameSession);
+    Optional<Participant> findByGameSessionAndGuestDisplayName(GameSession gameSession, String guestDisplayName);
 }

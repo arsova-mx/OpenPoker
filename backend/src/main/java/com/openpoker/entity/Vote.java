@@ -10,7 +10,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "user_id"}))
+@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "participant_id"}))
 @Getter
 @Setter
 @NoArgsConstructor

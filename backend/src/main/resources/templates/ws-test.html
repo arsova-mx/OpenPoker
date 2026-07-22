@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>WebSocket STOMP Tester</title>
+    <title>WebSocket STOMP Tester (Guests Supported)</title>
     <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
     <style>
         body { font-family: monospace; padding: 20px; background: #1e1e1e; color: #d4d4d4; }
         h2 { color: #569cd6; }
         input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
         input { width: 180px; }
-        #jwtToken { width: 350px; border-color: #0e639c; } /* Destacamos el campo del token */
+        #jwtToken { width: 350px; border-color: #0e639c; }
+        #guestName { border-color: #4ec9b0; } /* Destacamos el campo de invitado */
         #ticketId { width: 280px; }
         #cardValue { width: 280px; }
         button { cursor: pointer; background: #0e639c; border: none; }
@@ -25,9 +26,12 @@
     <h2>OpenPoker — WebSocket STOMP Tester</h2>
 
     <div>
-        <label>Token JWT: <input id="jwtToken" value="" placeholder="Bearer eyJhbGci..."></label>
         <label>Invite Code: <input id="inviteCode" value="" placeholder="ABC123"></label>
-        <label>Username: <input id="username" value="" placeholder="testUser"></label>
+        <label>Token JWT (User): <input id="jwtToken" value="" placeholder="Bearer eyJhbGci..."></label>
+    </div>
+    <div style="margin-top: 8px;">
+        <label>Username (Registered): <input id="username" value="" placeholder="testUser"></label>
+        <label>Guest Name (Invitado): <input id="guestName" value="" placeholder="Carlos Guest"></label>
     </div>
     <div style="margin-top: 8px;">
         <label>Ticket ID (UUID): <input id="ticketId" value="" placeholder="uuid-del-ticket"></label>
@@ -75,13 +79,11 @@
             const ws = new WebSocket('ws://localhost:8080/ws-native', ['v12.stomp']);
             stompClient = Stomp.over(ws);
 
-            // 🚀 EXTRAEMOS EL TOKEN Y LE ASEGURAMOS EL PREFIJO BEARER
             let token = document.getElementById('jwtToken').value.trim();
             if (token && !token.startsWith('Bearer ')) {
                 token = 'Bearer ' + token;
             }
 
-            // 🚀 INYECTAMOS LA CABECERA DE AUTORIZACIÓN EN LA CONEXIÓN STOMP
             const headers = {};
             if (token) {
                 headers['Authorization'] = token;
@@ -128,11 +130,7 @@
                             log('ERROR payload: ' + message.body, 'error');
                         }
                     });
-                    log('Subscribed to /topic/session/' + code + '/participants', 'connected');
-                    log('Subscribed to /topic/session/' + code + '/votes', 'connected');
-                    log('Subscribed to /topic/session/' + code + '/vote-status', 'connected');
-                    log('Subscribed to /topic/session/' + code + '/state', 'connected');
-                    log('Subscribed to /topic/session/' + code + '/errors', 'connected');
+                    log('Subscribed to session topics for code: ' + code, 'connected');
                 }
             }, function (error) {
                 log('ERROR: ' + error, 'error');
@@ -141,10 +139,23 @@
 
         function joinSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
-            const payload = {
-                inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value
-            };
+            
+            const username = document.getElementById('username').value.trim();
+            const guestName = document.getElementById('guestName').value.trim();
+            const inviteCode = document.getElementById('inviteCode').value.trim();
+
+            // 🚀 Construimos el payload dependiendo de si se conecta como Usuario o Invitado
+            const payload = { inviteCode: inviteCode };
+
+            if (guestName) {
+                payload.guestName = guestName; // Si llenó Guest Name, lo manda como invitado
+            } else if (username) {
+                payload.username = username;   // Si llenó Username, lo manda como usuario registrado
+            } else {
+                log('Error: Ingresa un Username o un Guest Name para unirte', 'error');
+                return;
+            }
+
             stompClient.send('/app/session.join', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT join: ' + JSON.stringify(payload), 'sent');
         }
@@ -163,7 +174,6 @@
 
             log('SEND PATCH -> Iniciando votación para ticket: ' + ticketId, 'sent');
 
-            // 🚀 CORRECCIÓN CRÍTICA: Apuntar explícitamente al puerto 8080 del backend
             fetch(`http://localhost:8080/api/tickets/${ticketId}/status?newStatus=VOTING`, {
                 method: 'PATCH',
                 headers: {
@@ -189,7 +199,8 @@
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value
+                username: document.getElementById('username').value,
+                guestName: document.getElementById('guestName').value
             };
             stompClient.send('/app/session.leave', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT leave: ' + JSON.stringify(payload), 'sent');
@@ -205,10 +216,6 @@
                 log('Error: Debes ingresar el Ticket ID y el Card Value', 'error');
                 return;
             }
-
-            const btn = event.target;
-            btn.disabled = true;
-            setTimeout(() => { btn.disabled = false; }, 1000); // Reactivar en 1 segundo
 
             const payload = {
                 ticketId: ticketInput,
@@ -229,7 +236,6 @@
 
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value,
                 ticketId: ticketId
             };
             stompClient.send('/app/session.reveal', { 'content-type': 'application/json' }, JSON.stringify(payload));
@@ -238,8 +244,6 @@
 
         function resetVotes() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
-            if (!lastSessionState || !lastSessionState.id) { log('No session state received yet. Join or wait for state update.', 'error'); return; }
-
             const ticketId = document.getElementById('ticketId').value.trim();
 
             if (!ticketId) {
@@ -249,8 +253,6 @@
 
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value,
-                sessionId: lastSessionState.id,
                 ticketId: ticketId
             };
             stompClient.send('/app/session.reset-votes', { 'content-type': 'application/json' }, JSON.stringify(payload));
@@ -259,11 +261,6 @@
 
         function finishSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
-            if (!lastSessionState) { log('No session state received yet.', 'error'); return; }
-            if (lastSessionState.hostUsername !== document.getElementById('username').value) {
-                log('Only the host can finish the session.', 'error');
-                return;
-            }
             const payload = {
                 inviteCode: document.getElementById('inviteCode').value,
                 username: document.getElementById('username').value
@@ -278,10 +275,6 @@
                     lastSessionState = null;
                     lastParticipants = [];
                     updateFinishButton();
-
-                    document.getElementById('inviteCode').value = '';
-                    document.getElementById('ticketId').value = '';
-                    
                     log('DISCONNECTED', 'error');
                 });
             }
