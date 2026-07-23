@@ -41,7 +41,7 @@ public class SecurityConfig {
         .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/card-decks/**").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/sessions/join").permitAll() // 👈 PERMITIR JOIN A INVITADOS
+                .requestMatchers(HttpMethod.POST, "/api/sessions/*/join").permitAll() // 👈 PERMITIR JOIN A INVITADOS
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()

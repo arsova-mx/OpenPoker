@@ -100,9 +100,10 @@ public class GameSessionService {
     }
 
 
+    @Transactional
     public SessionResponse joinSession(JoinSessionRequest request) {
         GameSession session = sessionRepository.findBySessionCode(request.code())
-            .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+                .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
         Participant participant;
 
@@ -111,41 +112,52 @@ public class GameSessionService {
             User user = userRepository.findByUsername(request.username())
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
-            if (participantRepository.findByGameSessionAndUser(session, user).isPresent()) {
-                throw new UserAlreadyInSessionException("El usuario ya esta en la session");
+            var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
+            if (existingParticipant.isPresent()) {
+                participant = existingParticipant.get(); // Reutilizar si ya existe
+            } else {
+                Participant.Role role = (session.getHostUserId() != null && session.getHostUserId().equals(user.getId())) 
+                        ? Participant.Role.HOST 
+                        : Participant.Role.VOTER;
+
+                participant = Participant.builder()
+                        .gameSession(session)
+                        .user(user)
+                        .guestDisplayName(null)
+                        .role(role)
+                        .build();
+                
+                participant = participantRepository.save(participant);
             }
 
-        Participant.Role role = (session.getHostUserId() != null && session.getHostUserId().equals(user.getId())) 
-                ? Participant.Role.HOST 
-                : Participant.Role.VOTER;
-
-        participant = Participant.builder()
-                .gameSession(session)
-                .user(user)
-                .guestDisplayName(null)
-                .role(role)
-                .build();
-
-    // CASO 2: Es Invitado (trae guestName)
+        // CASO 2: Es Invitado (trae guestName)
         } else if (request.guestName() != null && !request.guestName().isBlank()) {
-            participant = Participant.builder()
-                    .gameSession(session)
-                    .user(null) // 👈 user va NULL
-                    .guestDisplayName(request.guestName())
-                    .role(Participant.Role.VOTER) // Los invitados siempre entran como VOTER (el host siempre es el creador)
-                    .build();
+            
+            // 🚀 Búsqueda de invitado existente para evitar duplicados en reconexión
+            var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, request.guestName());
+
+            if (existingGuest.isPresent()) {
+                participant = existingGuest.get(); // Reutilizar el invitado existente
+            } else {
+                participant = Participant.builder()
+                        .gameSession(session)
+                        .user(null)
+                        .guestDisplayName(request.guestName())
+                        .role(Participant.Role.VOTER)
+                        .build();
+
+                participant = participantRepository.save(participant);
+            }
+
         } else {
             throw new IllegalArgumentException("Debe proporcionar un usuario registrado o un nombre de invitado.");
         }
 
-        participantRepository.save(participant);
-
-        // Obtener el nombre del Host para la respuesta (usando participant o user)
         String hostName = getHostDisplayName(session);
 
         return mapToResponse(session, hostName);
-}
-
+    }
+    
     // Helper para obtener el nombre del Host sin asumir que es un User
     private String getHostDisplayName(GameSession session) {
         if (session.getHostUserId() == null) {

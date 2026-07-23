@@ -37,7 +37,12 @@ public class VoteController {
         Participant participant = getParticipantByUsername(code, username);
         UUID cardValueId = UUID.fromString(request.cardValue());
 
-        return ResponseEntity.ok(service.castVote(username, code,ticketId, request));
+        return ResponseEntity.ok(service.submitVote(
+            participant.getGameSession().getId(), 
+            ticketId, 
+            participant.getId(), 
+            cardValueId
+        ));
     }
 
     @GetMapping

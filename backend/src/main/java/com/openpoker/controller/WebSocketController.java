@@ -20,6 +20,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -53,7 +54,8 @@ public class WebSocketController {
 
                 // 1. Caso Usuario Registrado
             if (username != null) {
-                User user = userRepository.findByUsername(username).orElseThrow();
+                User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
                 var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
 
                 if (existingParticipant.isPresent()) {

@@ -111,7 +111,8 @@ public class VoteService {
 
         List<Vote> votes = voteRepository.findAllByTicket(ticket);
 
-        boolean isTicketRevealed = ticket.getStatus() == TicketStatus.REVEALED;
+        boolean isTicketRevealed = ticket.getStatus() == TicketStatus.REVEALED 
+                            || ticket.getStatus() == TicketStatus.FINISHED;
 
         List<VoteResponse> response = votes.stream()
         .map(v -> {
