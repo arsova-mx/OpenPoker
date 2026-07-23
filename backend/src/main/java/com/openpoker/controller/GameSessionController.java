@@ -53,9 +53,5 @@ public class GameSessionController {
         return cardDeckService.getAllDecks();
     }
 
-    @PostMapping("/{code}/finish")
-    public ResponseEntity<SessionResponse> finish(@AuthenticationPrincipal String username, @PathVariable String code){
-        return ResponseEntity.ok(gameSessionService.finishSession(username, code));
-    }
 }
 

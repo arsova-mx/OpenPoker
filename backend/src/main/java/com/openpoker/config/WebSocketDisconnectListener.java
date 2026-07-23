@@ -34,7 +34,7 @@ public class WebSocketDisconnectListener {
 
             try {
                 UUID sessionId = info.sessionId();
-                gameSessionService.handleDisconnect(info.username(), info.inviteCode());
+                gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
 
                 SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
 

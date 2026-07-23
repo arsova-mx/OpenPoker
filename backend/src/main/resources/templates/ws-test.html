@@ -67,11 +67,17 @@
 
         function updateFinishButton() {
             const button = document.getElementById('finishButton');
-            const username = document.getElementById('username').value;
-            const isHost = lastSessionState
-                && lastSessionState.hostUsername === username
-                && lastParticipants.some(p => p.username === username && p.role === 'HOST');
+            const usernameInput = document.getElementById('username').value.trim();
+            const guestNameInput = document.getElementById('guestName').value.trim();
+            const currentName = usernameInput || guestNameInput;
 
+            // Buscamos si el usuario/invitado actual es HOST en la lista de participantes
+            const isHost = lastParticipants.some(p => {
+                const pName = p.username || p.displayName || p.effectiveName || p.guestDisplayName;
+                return pName === currentName && p.role === 'HOST';
+            });
+
+            // Habilitamos el botón si es HOST
             button.disabled = !isHost;
         }
 
@@ -261,12 +267,23 @@
 
         function finishSession() {
             if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+
+            const ticketId = document.getElementById('ticketId').value.trim();
+            const inviteCode = document.getElementById('inviteCode').value.trim();
+
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para finalizar la estimación', 'error');
+                return;
+            }
+
+            // 🚀 Enviamos el ticketId que requiere tu backend actualizado
             const payload = {
-                inviteCode: document.getElementById('inviteCode').value,
-                username: document.getElementById('username').value
+                inviteCode: inviteCode,
+                ticketId: ticketId
             };
+
             stompClient.send('/app/session.finish', { 'content-type': 'application/json' }, JSON.stringify(payload));
-            log('SENT finish session: ' + JSON.stringify(payload), 'sent');
+            log('SENT finish ticket: ' + JSON.stringify(payload), 'sent');
         }
 
         function disconnect() {

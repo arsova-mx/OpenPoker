@@ -10,6 +10,7 @@ import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.service.GameSessionService;
+import com.openpoker.service.TicketService;
 import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class WebSocketController {
     private final GameSessionRepository sessionRepository;
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final TicketService ticketService;
 
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
@@ -111,7 +113,7 @@ public class WebSocketController {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            service.leaveSession(sessionInfo.username(), inviteCode);
+            service.leaveSession(sessionInfo.participantId(), inviteCode);
 
             sessionRegistry.unregister(headerAccessor.getSessionId());
 
@@ -225,13 +227,25 @@ public class WebSocketController {
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionInfo.inviteCode();
-            String username = sessionInfo.username();
-            Object sessionState = service.finishSession(username, inviteCode);
 
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", List.of());
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", sessionState);
+            // 🚀 Extraemos el participantId de la sesión de WebSocket
+            UUID participantId = sessionInfo.participantId();
+
+            // 1. Obtenemos el ticketId que viene en el payload
+            String ticketIdStr = payload.get("ticketId");
+            if (ticketIdStr == null || ticketIdStr.isBlank()) {
+                throw new IllegalArgumentException("Se requiere el ticketId para finalizar la estimación.");
+            }
+            UUID ticketId = UUID.fromString(ticketIdStr);
+
+            // 2. Finalizamos el ticket en TicketService
+            var ticketResponse = ticketService.finishTicket(ticketId,participantId);
+
+            // 3. Transmitimos el estado actualizado del ticket a la sala
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/ticket-updated", ticketResponse);
+
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.finish", ex);
+            publishError(inviteCode, "ticket.finish", ex);
         }
     }
 
