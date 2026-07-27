@@ -210,7 +210,7 @@ public class GameSessionService {
     public void handleDisconnect(UUID participantId, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameIsNotParticipantSessionException("Participante no encontrado"));
 
         if (participant.getRole() == Participant.Role.HOST) {
             // Si es el host, finalizar la sesión

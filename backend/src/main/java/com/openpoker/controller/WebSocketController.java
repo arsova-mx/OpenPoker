@@ -132,7 +132,7 @@ public class WebSocketController {
 
     @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
-        String inviteCode = payload.get("inviteCode");;
+        String inviteCode = payload.get("inviteCode");
 
         try {
             String cardValueStr = payload.get("cardValue");

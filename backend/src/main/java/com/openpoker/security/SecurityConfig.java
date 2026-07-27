@@ -42,7 +42,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/card-decks/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/sessions/*/join").permitAll() // 👈 PERMITIR JOIN A INVITADOS
-                .requestMatchers("/ws/**").permitAll()
+                .requestMatchers("/ws/**", "/ws-native/**").permitAll()
                 .requestMatchers("/api/**").authenticated()
                 .anyRequest().permitAll()
         )
