@@ -1,6 +1,7 @@
 package com.openpoker.controller;
 
 import com.openpoker.dto.CreateSessionRequest;
+import com.openpoker.dto.JoinSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.dto.VotingDeckResponse;
 import com.openpoker.service.CardDeckService;
@@ -40,8 +41,11 @@ public class GameSessionController {
     }
 
     @PostMapping("/{code}/join")
-    public ResponseEntity<SessionResponse> join(@AuthenticationPrincipal String username, @PathVariable String code) {
-        return ResponseEntity.ok(gameSessionService.joinSession(username, code));
+    public ResponseEntity<SessionResponse> join(@AuthenticationPrincipal String username, @PathVariable String code,@RequestBody(required = false) JoinSessionRequest request) {
+        String guestName = (request != null) ? request.guestName() : null;
+
+        JoinSessionRequest joinRequest = new JoinSessionRequest(code, username, guestName);
+        return ResponseEntity.ok(gameSessionService.joinSession(joinRequest));
     }
 
     @GetMapping
@@ -49,9 +53,5 @@ public class GameSessionController {
         return cardDeckService.getAllDecks();
     }
 
-    @PostMapping("/{code}/finish")
-    public ResponseEntity<SessionResponse> finish(@AuthenticationPrincipal String username, @PathVariable String code){
-        return ResponseEntity.ok(gameSessionService.finishSession(username, code));
-    }
 }
 

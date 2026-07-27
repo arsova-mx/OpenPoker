@@ -33,20 +33,22 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         if (StompCommand.CONNECT.equals(command)) {
             String authHeader = accessor.getFirstNativeHeader("Authorization");
 
-            if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-                throw new IllegalArgumentException("Missing or invalid Authorization header on STOMP CONNECT");
+            // 🚀 PERMITIMOS INVITADOS: Si trae token, lo autenticamos; si no trae nada, lo dejamos pasar.
+            if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
+                String token = authHeader.substring(BEARER_PREFIX.length()).trim();
+
+                if (jwtService.validateToken(token)) {
+                    String username = jwtService.extractUsername(token);
+                    UsernamePasswordAuthenticationToken authentication = 
+                            new UsernamePasswordAuthenticationToken(username, null, List.of());
+
+                    accessor.setUser(authentication);
+                } else {
+                    // Si mandó un token pero es inválido/expirado, rechazamos por seguridad
+                    throw new IllegalArgumentException("Invalid JWT token");
+                }
             }
-
-            String token = authHeader.substring(BEARER_PREFIX.length()).trim();
-
-            if (!jwtService.validateToken(token)) {
-                throw new IllegalArgumentException("Invalid JWT token");
-            }
-
-            String username = jwtService.extractUsername(token);
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(username, null, List.of());
-
-            accessor.setUser(authentication);
+            // Si authHeader es null o no es Bearer, no lanzamos excepción; pasa como Invitado (Guest)
         }
 
         return message;

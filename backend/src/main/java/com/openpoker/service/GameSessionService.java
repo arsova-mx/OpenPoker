@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.openpoker.sessioncodegenerator.SessionCodeGenerator;
 import com.openpoker.dto.CreateSessionRequest;
+import com.openpoker.dto.JoinSessionRequest;
 import com.openpoker.dto.SessionResponse;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
@@ -99,36 +100,137 @@ public class GameSessionService {
     }
 
 
-    public SessionResponse joinSession(String username, String code) {
-                log.info("join session ---------------------------------------------------------------------");
+    @Transactional
+    public SessionResponse joinSession(JoinSessionRequest request) {
+        GameSession session = sessionRepository.findBySessionCode(request.code())
+                .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
+        Participant participant;
+
+        // CASO 1: Es Usuario Registrado (trae username)
+        if (request.username() != null && !request.username().isBlank()) {
+            User user = userRepository.findByUsername(request.username())
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+
+            var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
+            if (existingParticipant.isPresent()) {
+                participant = existingParticipant.get(); // Reutilizar si ya existe
+            } else {
+                Participant.Role role = (session.getHostUserId() != null && session.getHostUserId().equals(user.getId())) 
+                        ? Participant.Role.HOST 
+                        : Participant.Role.VOTER;
+
+                participant = Participant.builder()
+                        .gameSession(session)
+                        .user(user)
+                        .guestDisplayName(null)
+                        .role(role)
+                        .build();
+                
+                participant = participantRepository.save(participant);
+            }
+
+        // CASO 2: Es Invitado (trae guestName)
+        } else if (request.guestName() != null && !request.guestName().isBlank()) {
+            
+            // 🚀 Búsqueda de invitado existente para evitar duplicados en reconexión
+            var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, request.guestName());
+
+            if (existingGuest.isPresent()) {
+                participant = existingGuest.get(); // Reutilizar el invitado existente
+            } else {
+                participant = Participant.builder()
+                        .gameSession(session)
+                        .user(null)
+                        .guestDisplayName(request.guestName())
+                        .role(Participant.Role.VOTER)
+                        .build();
+
+                participant = participantRepository.save(participant);
+            }
+
+        } else {
+            throw new IllegalArgumentException("Debe proporcionar un usuario registrado o un nombre de invitado.");
+        }
+
+        String hostName = getHostDisplayName(session);
+
+        return mapToResponse(session, hostName);
+    }
+    
+    // Helper para obtener el nombre del Host sin asumir que es un User
+    private String getHostDisplayName(GameSession session) {
+        if (session.getHostUserId() == null) {
+            return "Host Anónimo";
+        }
+        return userRepository.findById(session.getHostUserId())
+                .map(User::getUsername)
+                .orElse("Host");
+        }
+
+    public List<Participant> getParticipants(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-
-        if(participantRepository.findByGameSessionAndUser(session, user).isPresent()) {
-            throw new UserAlreadyInSessionException("El usuario ya esta en la session");
-        }
-
-        Participant.Role role = session.getHostUserId().equals(user.getId()) ? Participant.Role.HOST : Participant.Role.VOTER;
-
-        Participant participant = Participant.builder().gameSession(session).user(user).role(role).build();
-
-        participantRepository.save(participant);
-
-        String hostUsername = username;
-        if (role != Participant.Role.HOST) {
-            if (session.getHostUserId() == null) {
-                throw new IllegalStateException("La sesión no tiene un Host ID válido asignado.");
-            }
-            User host = userRepository.findById(session.getHostUserId())
-                    .orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
-            hostUsername = host.getUsername();
-        }
-        log.info("si hizo el join bien");
-        return mapToResponse(session, hostUsername);
+        return participantRepository.findAllByGameSession(session);
     }
 
+    public SessionResponse leaveSession(UUID participantId, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+
+        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameIsNotParticipantSessionException(
+                "Participante no encontrado"));
+
+        if (!participant.getGameSession().getId().equals(session.getId())) {
+            throw new UsernameIsNotParticipantSessionException(
+                "El participante no pertenece a esta sesión");
+    }
+
+        if (participant.getRole() == Participant.Role.HOST) {
+            throw new InsufficientRoleException("El host no puede abandonar la session");
+        }
+
+        participantRepository.delete(participant);
+
+        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
+
+        return mapToResponse(session, host.getUsername());
+    }
+
+    private SessionResponse mapToResponse(GameSession session, String hostUsername) {
+        long count = participantRepository.countByGameSession(session);
+
+        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, count, session.getCreatedAt());
+    }
+
+
+    // TODO: Cuando se implemente el historial de sesiones,
+    // reemplazar la eliminación por un cierre lógico (closedAt/status).
+    @Transactional
+    public void handleDisconnect(UUID participantId, String code) {
+        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameIsNotParticipantSessionException("Participante no encontrado"));
+
+        if (participant.getRole() == Participant.Role.HOST) {
+            // Si es el host, finalizar la sesión
+            deleteSession(code);
+        } else {
+            // Si no es el host, simplemente abandonar
+            leaveSession(participantId, code);
+        }
+    }
+
+        @Transactional
+        public void deleteSession(String code) {
+
+            GameSession session = sessionRepository.findBySessionCode(code)
+                    .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
+
+            sessionRepository.delete(session);
+        }
+
+            /* 
     @Transactional
     public SessionResponse finishSession(String username, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
@@ -148,51 +250,6 @@ public class GameSessionService {
 
         return mapToResponse(session, user.getUsername());
     }
-
-    public List<Participant> getParticipants(String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
-        return participantRepository.findAllByGameSession(session);
-    }
-
-    public SessionResponse leaveSession(String username, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-
-        Participant participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow(() -> new UsernameIsNotParticipantSessionException(
-                "No eres participante"));
-
-        if (session.getHostUserId().equals(user.getId())) {
-            throw new InsufficientRoleException("El host no puede abandonar la session");
-        }
-
-        participantRepository.delete(participant);
-
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
-
-        return mapToResponse(session, host.getUsername());
-    }
-
-    private SessionResponse mapToResponse(GameSession session, String hostUsername) {
-        long count = participantRepository.countByGameSession(session);
-
-        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, count, session.getCreatedAt());
-    }
-
-    @Transactional
-    public void handleDisconnect(String username, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
-        User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-
-        if (session.getHostUserId().equals(user.getId())) {
-            // Si es el host, finalizar la sesión
-            finishSession(username, code);
-        } else {
-            // Si no es el host, simplemente abandonar
-            leaveSession(username, code);
-        }
-    }
+    */
 
 }
