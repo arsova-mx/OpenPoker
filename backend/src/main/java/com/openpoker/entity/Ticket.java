@@ -1,5 +1,6 @@
 package com.openpoker.entity;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -55,6 +56,12 @@ public class Ticket {
     private CardValue estimatedCard;
 
     private Integer estimatedValue;
+
+    @Column(name = "duration_seconds")
+    private Integer durationSeconds;
+
+    @Column(name = "timer_expires_at")
+    private Instant timerExpiresAt;
 
     @PrePersist
     public void prePersist() {
