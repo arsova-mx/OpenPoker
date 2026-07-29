@@ -2,6 +2,7 @@ package com.openpoker.service;
 
 import com.openpoker.dto.CastVoteRequest;
 import com.openpoker.dto.VoteResponse;
+import com.openpoker.dto.VoteStatisticsDTO;
 import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.VotingResultsResponse;
 import com.openpoker.entity.*;
@@ -34,7 +35,7 @@ public class VoteService {
     private final ParticipantRepository participantRepository;
     private final TicketRepository ticketRepository;
     private final CardValueRepository cardValueRepository;
-   
+    private final VoteStatisticsService voteStatisticsService;
 
     @Transactional
     public VoteResponse submitVote(UUID sessionId,UUID ticketId, UUID participantId, UUID value) {
@@ -97,7 +98,7 @@ public class VoteService {
             sessionRepository.save(session);
         }
 
-        return new VoteResponse(participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
+        return new VoteResponse(savedVote.getId(),participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
     }
     @Transactional(readOnly = true)
     public VotingResultsResponse getVotes(UUID sessionId,UUID ticketId, UUID participantId) {
@@ -123,6 +124,7 @@ public class VoteService {
                     : "*";
 
             return new VoteResponse(
+                v.getId(),
                 v.getParticipant().getEffectiveName(), 
                 cardDisplay, 
                 v.getUpdatedAt()
@@ -192,19 +194,15 @@ public class VoteService {
         sessionRepository.save(session);
 
         // 2. Calcular promedio basado en weight (ignorar peso 0 como '?' o '☕')
-        double avgWeight = votes.stream()
-            .mapToDouble(v -> v.getCardValue().getWeight())
-            .filter(w -> w > 0)
-            .average()
-            .orElse(0.0);
+        VoteStatisticsDTO statistics = voteStatisticsService.calculateStatistics(votes);
         
             // 3. Buscar la carta sugerida más cercana por peso
         CardValue suggested = cardValueRepository.findClosestByWeight(
-            session.getDeck().getId(), avgWeight);
+            session.getDeck().getId(), statistics.average());
 
         // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
-            .map(v -> new VoteResponse(v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
+            .map(v -> new VoteResponse(v.getId(),v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
             .toList();
 
         // 5. Retornar el nuevo DTO que incluye la sugerencia
@@ -212,8 +210,9 @@ public class VoteService {
             session.getSessionCode(),
             voteResponses,
             true,
-            avgWeight,
-            suggested != null ? suggested.getValue() : "N/A"
+            statistics.average(),
+            suggested != null ? suggested.getValue() : "N/A",
+            statistics
         );
     }
 
