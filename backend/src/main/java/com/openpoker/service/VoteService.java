@@ -98,7 +98,7 @@ public class VoteService {
             sessionRepository.save(session);
         }
 
-        return new VoteResponse(participant.getId(),participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
+        return new VoteResponse(savedVote.getId(),participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
     }
     @Transactional(readOnly = true)
     public VotingResultsResponse getVotes(UUID sessionId,UUID ticketId, UUID participantId) {
@@ -124,7 +124,7 @@ public class VoteService {
                     : "*";
 
             return new VoteResponse(
-                v.getParticipant().getId(),
+                v.getId(),
                 v.getParticipant().getEffectiveName(), 
                 cardDisplay, 
                 v.getUpdatedAt()
@@ -202,7 +202,7 @@ public class VoteService {
 
         // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
-            .map(v -> new VoteResponse(v.getParticipant().getId(),v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
+            .map(v -> new VoteResponse(v.getId(),v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
             .toList();
 
         // 5. Retornar el nuevo DTO que incluye la sugerencia
