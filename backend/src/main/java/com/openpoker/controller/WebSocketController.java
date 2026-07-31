@@ -6,7 +6,6 @@ import com.openpoker.dto.TimerStatusDTO;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
-import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;

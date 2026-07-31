@@ -176,8 +176,12 @@ public class VoteService {
             throw new SessionNotInVotingException("Session finalizada");
         }
 
-        if (ticket.getStatus() != TicketStatus.WAITING) {
-            throw new SessionNotInVotingException("Session aun no ha cerrado la votacion");
+            // 🚀 REGLA FLEXIBLE: Permitir revelar si está en WAITING O si está en VOTING con timer expirado
+        boolean isWaiting = ticket.getStatus() == TicketStatus.WAITING;
+        boolean isVotingAndExpired = ticket.getStatus() == TicketStatus.VOTING && ticket.getTimerExpiresAt() != null && Instant.now().isAfter(ticket.getTimerExpiresAt());
+
+        if (!isWaiting && !isVotingAndExpired) {
+            throw new SessionNotInVotingException("La votación sigue activa y el tiempo no ha expirado");
         }
 
         Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
