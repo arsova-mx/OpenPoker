@@ -11,4 +11,5 @@ import com.openpoker.entity.GameSession;
 @Repository
 public interface GameSessionRepository extends JpaRepository<GameSession, UUID> {
     Optional<GameSession> findBySessionCode(String sessionCode);
+    
 }

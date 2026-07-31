@@ -112,6 +112,10 @@
                     stompClient.subscribe('/topic/session/' + code + '/votes', function (message) {
                         log('RECEIVED votes: ' + message.body, 'msg');
                     });
+                    stompClient.subscribe('/topic/session/' + code + '/timer', function (message) {
+                        log('RECEIVED timer: ' + message.body, 'msg');
+                        // Aquí actualizas la UI del reloj countdown
+                    });
                     stompClient.subscribe('/topic/session/' + code + '/vote-status', function (message) {
                         log('RECEIVED vote-status: ' + message.body, 'msg');
                     });
