@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +62,10 @@ public class VoteService {
 
         if (session.getDeck() == null) {
             throw new IllegalStateException("La sesion no tiene deck configurado");
+        }
+
+        if (ticket.getTimerExpiresAt() != null && Instant.now().isAfter(ticket.getTimerExpiresAt())) {
+            throw new IllegalStateException("El tiempo de votación para este ticket ha finalizado");
         }
 
         

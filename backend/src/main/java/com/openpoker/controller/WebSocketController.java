@@ -1,6 +1,8 @@
 package com.openpoker.controller;
 
 import com.openpoker.dto.JoinSessionRequest;
+import com.openpoker.dto.SetTimerRequest;
+import com.openpoker.dto.TimerStatusDTO;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
@@ -11,6 +13,7 @@ import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.TicketService;
+import com.openpoker.service.TicketTimerService;
 import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +42,7 @@ public class WebSocketController {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final TicketService ticketService;
+    private final TicketTimerService ticketTimerService;
 
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
@@ -299,5 +303,41 @@ public class WebSocketController {
                 "type", ex.getClass().getSimpleName(),
                 "message", message
         ));
+    }
+
+    @MessageMapping("/session.set-timer")
+    public void setTimer(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
+        String inviteCode = null;
+        try {
+            String ticketIdStr = payload.get("ticketId");
+            String durationStr = payload.get("durationSeconds");
+
+            if (ticketIdStr == null || ticketIdStr.isBlank()) {
+                throw new IllegalArgumentException("El parámetro 'ticketId' es obligatorio.");
+            }
+
+            UUID ticketId = UUID.fromString(ticketIdStr);
+            Integer durationSeconds = (durationStr != null && !durationStr.isBlank()) 
+                                        ? Integer.parseInt(durationStr) 
+                                        : null;
+
+            WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
+            inviteCode = sessionInfo.inviteCode();
+
+            SetTimerRequest request = new SetTimerRequest(durationSeconds);
+
+            // Llamamos al servicio recién creado
+            TimerStatusDTO timerStatus = ticketTimerService.setTimer(
+                sessionInfo.sessionId(), 
+                ticketId, 
+                sessionInfo.participantId(), 
+                request
+            );
+
+            // La notificación por WS ya se envía internamente en TicketTimerService
+
+        } catch (RuntimeException ex) {
+            publishError(inviteCode, "session.set-timer", ex);
+        }
     }
 }
