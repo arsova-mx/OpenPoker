@@ -13,6 +13,7 @@ import com.openpoker.entity.Participant;
 import com.openpoker.entity.Ticket;
 import com.openpoker.entity.Participant.Role;
 import com.openpoker.globalexception.InsufficientRoleException;
+import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.globalexception.UserNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
@@ -34,8 +35,8 @@ public class TicketTimerService {
     @Transactional
     public TimerStatusDTO setTimer(UUID sessionId, UUID ticketId, UUID participantId, SetTimerRequest request){
         GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Sesion no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrada"));
-        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UserNotFoundException("Usuario no encontrado"));
+        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
 
         if(!ticket.getGameSession().getId().equals(sessionId)){
             throw new IllegalArgumentException("El ticket no pertenece a la sesión");
@@ -61,10 +62,10 @@ public class TicketTimerService {
         }
 
         ticket.setTimerExpiresAt(timerExpiresAt);
-        ticket.setDurationSeconds(request.durationSeconds());
+        ticket.setDurationSeconds(duration);
         ticketRepository.save(ticket);
 
-        TimerStatusDTO dto = TimerStatusDTO.of(request.durationSeconds(), timerExpiresAt);
+        TimerStatusDTO dto = TimerStatusDTO.of(duration, timerExpiresAt);
 
         // Notificar por WebSocket
         messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/timer", dto);
