@@ -15,7 +15,6 @@ import com.openpoker.entity.Participant.Role;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
-import com.openpoker.globalexception.UserNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
