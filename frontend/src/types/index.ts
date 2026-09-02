@@ -26,12 +26,12 @@ export type AuthResponse = {
 export type CreateSessionRequest = {
     name: string
 }
+
 export type SessionResponse = {
-    id: string,
-    sessionCode: string, 
-    name: string,
-    hostUsername: string, 
-    status: string,
-    participantCount: number,
-    createdAt: string 
-}
+  id: string;
+  sessionCode: string;
+  name: string;
+  hostUsername: string;
+  participantCount: number;
+  createdAt: string;
+};

@@ -1,12 +1,11 @@
-import { createBrowserRouter } from "react-router-dom";
-import { redirect } from "react-router-dom";
+import { createBrowserRouter, redirect } from "react-router-dom";
 import Root from "./Root";
 import ErrorGlobal from "../pages/ErrorGlobal";
 import { authRoutes } from "./authRoutes";
 import LandingPage from "../pages/landingPage";
 import { getAuthToken, loader as tokenLoader } from "../hooks/useTokenDuration";
-import Dashboard from "../pages/Dashboard";
 import { Home } from "../pages/Home";
+import SessionLobby from "../components/SessionLobby/SessionLobby";
 
 function requireAuth() {
   const token = getAuthToken();
@@ -35,9 +34,8 @@ export const router = createBrowserRouter([
       {
         index: true,
         loader: redirectAuthenticated,
-        element: <LandingPage/>,
+        element: <LandingPage />,
       },
-
       {
         path: "home",
         loader: requireAuth,
@@ -45,13 +43,20 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Dashboard />,
+            element: <SessionLobby />,
           },
         ],
       },
-
+      {
+        path: "session/:code",
+        loader: requireAuth,
+        element: (
+          <div className="flex h-screen items-center justify-center text-xl font-bold">
+            Placeholder Tablero de Votación (Sesión en desarrollo)
+          </div>
+        ),
+      },
       ...authRoutes,
-      
     ],
   },
-])
+]);

@@ -4,21 +4,25 @@ import instance from "../clients/APIClient";
 
 const createSession = async (data: CreateSessionRequest): Promise<SessionResponse> => {
 
-    const response = await instance.post<SessionResponse>('/api/sessions', data)
+    const response = await instance.post<SessionResponse>('/sessions', data)
     return response.data;
 
 }
 
-const getSession = async (code: string): Promise<string> => {
-    const response = await instance.get(`/api/sessions/${code}`)
+const getSession = async (code: string): Promise<SessionResponse> => {
+    const response = await instance.get<SessionResponse>(`/sessions/${code}`)
     return response.data;
 }
 
-const joinSession = async (code: string): Promise<string> => {
-    const response = await instance.get(`/api/sessions/${code}/join`)
+const joinSession = async (code: string): Promise<SessionResponse> => {
+    const response = await instance.post<SessionResponse>(`/sessions/${code}/join`)
     return response.data;
 }
 
 export const sessionServices = {
-    createSession, getSession, joinSession
-}
+    createSession, 
+    getSession, 
+    joinSession
+};
+
+export default sessionServices;
