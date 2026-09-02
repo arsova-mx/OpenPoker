@@ -7,6 +7,6 @@ public record VotingRRAverage(
     List<VoteResponse> votes,
     boolean revealed,
     double suggestedAverage, // Promedio calculado
-    String suggestedCardValue, // Valor sugerido (ej. "M" o "5")) {
+    String suggestedCardValue, // Valor sugerido (ej. "M" o "5")) 
     VoteStatisticsDTO statistics)
 {}

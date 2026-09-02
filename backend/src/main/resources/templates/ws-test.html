@@ -10,9 +10,10 @@
         input, button { padding: 8px; margin: 4px; border: 1px solid #555; background: #2d2d2d; color: #d4d4d4; border-radius: 4px; }
         input { width: 180px; }
         #jwtToken { width: 350px; border-color: #0e639c; }
-        #guestName { border-color: #4ec9b0; } /* Destacamos el campo de invitado */
+        #guestName { border-color: #4ec9b0; }
         #ticketId { width: 280px; }
         #cardValue { width: 280px; }
+        #timerDuration { width: 100px; border-color: #d7ba7d; }
         button { cursor: pointer; background: #0e639c; border: none; }
         button:hover { background: #1177bb; }
         #log { background: #111; padding: 12px; margin-top: 12px; max-height: 400px; overflow-y: auto; border-radius: 4px; white-space: pre-wrap; }
@@ -20,6 +21,7 @@
         .error { color: #f44747; }
         .msg { color: #ce9178; }
         .sent { color: #dcdcaa; }
+        .timer-warning { color: #d7ba7d; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -36,6 +38,10 @@
     <div style="margin-top: 8px;">
         <label>Ticket ID (UUID): <input id="ticketId" value="" placeholder="uuid-del-ticket"></label>
         <label>Card Value (UUID): <input id="cardValue" value="" placeholder="uuid-de-la-carta"></label>
+    </div>
+    <div style="margin-top: 8px; background: #252526; padding: 8px; border-radius: 4px;">
+        <label>Timer Duration (s): <input id="timerDuration" type="number" value="30" placeholder="Segundos"></label>
+        <button style="background: #d7ba7d; color: #1e1e1e; font-weight: bold;" onclick="setTimer()">Set Timer</button>
     </div>
     <div style="margin-top:16px">
         <button onclick="connect()">Connect</button>
@@ -57,6 +63,7 @@
         let stompClient = null;
         let lastSessionState = null;
         let lastParticipants = [];
+        let countdownInterval = null;
 
         function log(msg, cls = '') {
             const el = document.getElementById('log');
@@ -71,13 +78,11 @@
             const guestNameInput = document.getElementById('guestName').value.trim();
             const currentName = usernameInput || guestNameInput;
 
-            // Buscamos si el usuario/invitado actual es HOST en la lista de participantes
             const isHost = lastParticipants.some(p => {
                 const pName = p.username || p.displayName || p.effectiveName || p.guestDisplayName;
                 return pName === currentName && p.role === 'HOST';
             });
 
-            // Habilitamos el botón si es HOST
             button.disabled = !isHost;
         }
 
@@ -111,6 +116,15 @@
                     });
                     stompClient.subscribe('/topic/session/' + code + '/votes', function (message) {
                         log('RECEIVED votes: ' + message.body, 'msg');
+                    });
+                    stompClient.subscribe('/topic/session/' + code + '/timer', function (message) {
+                        log('RECEIVED timer: ' + message.body, 'timer-warning');
+                        try {
+                            const timerData = JSON.parse(message.body);
+                            startLocalCountdown(timerData.timerExpiresAt);
+                        } catch (e) {
+                            log('Error parsing timer status', 'error');
+                        }
                     });
                     stompClient.subscribe('/topic/session/' + code + '/vote-status', function (message) {
                         log('RECEIVED vote-status: ' + message.body, 'msg');
@@ -150,13 +164,12 @@
             const guestName = document.getElementById('guestName').value.trim();
             const inviteCode = document.getElementById('inviteCode').value.trim();
 
-            // 🚀 Construimos el payload dependiendo de si se conecta como Usuario o Invitado
             const payload = { inviteCode: inviteCode };
 
             if (guestName) {
-                payload.guestName = guestName; // Si llenó Guest Name, lo manda como invitado
+                payload.guestName = guestName;
             } else if (username) {
-                payload.username = username;   // Si llenó Username, lo manda como usuario registrado
+                payload.username = username;
             } else {
                 log('Error: Ingresa un Username o un Guest Name para unirte', 'error');
                 return;
@@ -164,6 +177,53 @@
 
             stompClient.send('/app/session.join', { 'content-type': 'application/json' }, JSON.stringify(payload));
             log('SENT join: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function setTimer() {
+            if (!stompClient || !stompClient.connected) { log('Not connected!', 'error'); return; }
+
+            const ticketId = document.getElementById('ticketId').value.trim();
+            const durationSeconds = document.getElementById('timerDuration').value.trim();
+
+            if (!ticketId) {
+                log('Error: Debes ingresar el Ticket ID para configurar el timer.', 'error');
+                return;
+            }
+
+            const payload = {
+                ticketId: ticketId,
+                durationSeconds: durationSeconds ? parseInt(durationSeconds) : null
+            };
+
+            stompClient.send('/app/session.set-timer', { 'content-type': 'application/json' }, JSON.stringify(payload));
+            log('SENT set-timer: ' + JSON.stringify(payload), 'sent');
+        }
+
+        function startLocalCountdown(expiresAtIso) {
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            if (!expiresAtIso) {
+                log('TIMER: Sin límite de tiempo (desactivado)', 'connected');
+                return;
+            }
+
+            const targetTime = new Date(expiresAtIso).getTime();
+
+            countdownInterval = setInterval(() => {
+                const now = new Date().getTime();
+                const distance = targetTime - now;
+
+                if (distance <= 0) {
+                    clearInterval(countdownInterval);
+                    log('⚠️ TIEMPO AGOTADO - Votación finalizada en servidor', 'error');
+                    return;
+                }
+
+                const secondsLeft = Math.ceil(distance / 1000);
+                if (secondsLeft % 5 === 0 || secondsLeft <= 5) {
+                    log(`⏳ Tiempo restante: ${secondsLeft}s`, secondsLeft <= 5 ? 'error' : 'timer-warning');
+                }
+            }, 1000);
         }
 
         function startTicketVoting() {
@@ -276,7 +336,6 @@
                 return;
             }
 
-            // 🚀 Enviamos el ticketId que requiere tu backend actualizado
             const payload = {
                 inviteCode: inviteCode,
                 ticketId: ticketId
@@ -287,6 +346,7 @@
         }
 
         function disconnect() {
+            if (countdownInterval) clearInterval(countdownInterval);
             if (stompClient) {
                 stompClient.disconnect(function () {
                     lastSessionState = null;

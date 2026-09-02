@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
-
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +62,10 @@ public class VoteService {
 
         if (session.getDeck() == null) {
             throw new IllegalStateException("La sesion no tiene deck configurado");
+        }
+
+        if (ticket.getTimerExpiresAt() != null && Instant.now().isAfter(ticket.getTimerExpiresAt())) {
+            throw new IllegalStateException("El tiempo de votación para este ticket ha finalizado");
         }
 
         
@@ -172,8 +176,12 @@ public class VoteService {
             throw new SessionNotInVotingException("Session finalizada");
         }
 
-        if (ticket.getStatus() != TicketStatus.WAITING) {
-            throw new SessionNotInVotingException("Session aun no ha cerrado la votacion");
+            // 🚀 REGLA FLEXIBLE: Permitir revelar si está en WAITING O si está en VOTING con timer expirado
+        boolean isWaiting = ticket.getStatus() == TicketStatus.WAITING;
+        boolean isVotingAndExpired = ticket.getStatus() == TicketStatus.VOTING && ticket.getTimerExpiresAt() != null && Instant.now().isAfter(ticket.getTimerExpiresAt());
+
+        if (!isWaiting && !isVotingAndExpired) {
+            throw new SessionNotInVotingException("La votación sigue activa y el tiempo no ha expirado");
         }
 
         Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
