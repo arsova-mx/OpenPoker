@@ -59,8 +59,17 @@ export default function SessionFormJoin() {
 
   return (
     <form onSubmit={handleJoin} className="space-y-4">
-      <div>
+      <div className="space-y-1">
+        {/* 1. Label accesible asociado al id del input */}
+        <label
+          htmlFor="session-code-input"
+          className="text-sm font-medium text-foreground"
+        >
+          Código de la sala
+        </label>
+
         <Input
+          id="session-code-input"
           placeholder="Código de 6 caracteres, ej. 7B9WII"
           value={sessionCode}
           onChange={(e) => {
@@ -69,11 +78,19 @@ export default function SessionFormJoin() {
           }}
           maxLength={6}
           disabled={isLoading}
+          /* 2. Expone el estado inválido cuando errorMessage tiene texto */
+          aria-invalid={!!errorMessage}
+          /* 3. Conecta el input con el contenedor del error para lectores de pantalla */
+          aria-describedby={errorMessage ? "session-code-error" : undefined}
           className="text-center font-mono uppercase tracking-widest"
         />
 
         {errorMessage && (
-          <p className="mt-1 text-center text-xs text-destructive">
+          <p
+            id="session-code-error"
+            role="alert"
+            className="mt-1 text-center text-xs text-destructive"
+          >
             {errorMessage}
           </p>
         )}

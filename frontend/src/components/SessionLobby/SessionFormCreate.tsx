@@ -48,16 +48,33 @@ export default function SessionFormCreate() {
 
   return (
     <form onSubmit={handleCreate} className="space-y-4">
-      <div>
+      <div className="space-y-1">
+        {/* 1. Label accesible asociado mediante htmlFor/id */}
+        <label
+          htmlFor="session-name-input"
+          className="text-sm font-medium text-foreground"
+        >
+          Nombre de la sesión
+        </label>
+
         <Input
+          id="session-name-input"
           placeholder="Nombre para la sesión, ej. Sprint 32"
           value={sessionName}
           onChange={(e) => setSessionName(e.target.value)}
           disabled={isLoading}
+          /* 2. Marca el estado inválido cuando hay error */
+          aria-invalid={!!errorMessage}
+          /* 3. Conecta el input con el mensaje de error para lectores de pantalla */
+          aria-describedby={errorMessage ? "session-name-error" : undefined}
         />
 
         {errorMessage && (
-          <p className="mt-1 text-xs text-destructive">
+          <p
+            id="session-name-error"
+            role="alert"
+            className="mt-1 text-xs text-destructive"
+          >
             {errorMessage}
           </p>
         )}
