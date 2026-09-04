@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 
 import { sessionServices } from "@/api/services/sessionServices";
 import { Button } from "../ui/button";
@@ -16,6 +15,7 @@ export default function SessionFormCreate() {
   const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // 1. Error inline exclusivo para validación local síncrona
     if (!sessionName.trim()) {
       setErrorMessage("Por favor ingresa un nombre para la sesión");
       return;
@@ -30,17 +30,9 @@ export default function SessionFormCreate() {
       });
 
       navigate(`/session/${response.sessionCode}`);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const message =
-          error.response?.data?.message ||
-          error.message ||
-          "Error al crear la sesión";
-
-        setErrorMessage(message);
-      } else {
-        setErrorMessage("Error inesperado al crear la sesión");
-      }
+    } catch {
+      // 2. El interceptor de APIClient ya dispara el toast global.
+      // No se setea errorMessage aquí para evitar duplicar el aviso en pantalla.
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +41,6 @@ export default function SessionFormCreate() {
   return (
     <form onSubmit={handleCreate} className="space-y-4">
       <div className="space-y-1">
-        {/* 1. Label accesible asociado mediante htmlFor/id */}
         <label
           htmlFor="session-name-input"
           className="text-sm font-medium text-foreground"
@@ -61,11 +52,12 @@ export default function SessionFormCreate() {
           id="session-name-input"
           placeholder="Nombre para la sesión, ej. Sprint 32"
           value={sessionName}
-          onChange={(e) => setSessionName(e.target.value)}
+          onChange={(e) => {
+            setSessionName(e.target.value);
+            if (errorMessage) setErrorMessage(null);
+          }}
           disabled={isLoading}
-          /* 2. Marca el estado inválido cuando hay error */
           aria-invalid={!!errorMessage}
-          /* 3. Conecta el input con el mensaje de error para lectores de pantalla */
           aria-describedby={errorMessage ? "session-name-error" : undefined}
         />
 

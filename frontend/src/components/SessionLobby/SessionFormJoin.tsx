@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 
 import { sessionServices } from "@/api/services/sessionServices";
 import { Button } from "../ui/button";
@@ -18,6 +17,7 @@ export default function SessionFormJoin() {
 
     const cleanCode = sessionCode.trim().toUpperCase();
 
+    // 1. Error inline exclusivo para validación local síncrona
     if (!/^[A-Z0-9]{6}$/.test(cleanCode)) {
       setErrorMessage(
         "El código debe tener exactamente 6 caracteres alfanuméricos"
@@ -32,26 +32,9 @@ export default function SessionFormJoin() {
       await sessionServices.joinSession(cleanCode);
 
       navigate(`/session/${cleanCode}`);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-
-        if (status === 404) {
-          setErrorMessage("La sala no existe o el código es incorrecto.");
-        } else if (status === 409) {
-          setErrorMessage("Ya estás unido a esta sesión.");
-        } else {
-          const message = error.response?.data?.message;
-
-          setErrorMessage(
-            typeof message === "string"
-              ? message
-              : "Ocurrió un error al unirse a la sala."
-          );
-        }
-      } else {
-        setErrorMessage("Ocurrió un error inesperado al unirse a la sala.");
-      }
+    } catch {
+      // 2. El interceptor de APIClient ya dispara el toast global.
+      // No seteamos errorMessage para evitar duplicar avisos en pantalla.
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +43,7 @@ export default function SessionFormJoin() {
   return (
     <form onSubmit={handleJoin} className="space-y-4">
       <div className="space-y-1">
-        {/* 1. Label accesible asociado al id del input */}
+        {/* Label accesible asociado al input */}
         <label
           htmlFor="session-code-input"
           className="text-sm font-medium text-foreground"
@@ -74,13 +57,11 @@ export default function SessionFormJoin() {
           value={sessionCode}
           onChange={(e) => {
             setSessionCode(e.target.value.toUpperCase());
-            setErrorMessage(null);
+            if (errorMessage) setErrorMessage(null);
           }}
           maxLength={6}
           disabled={isLoading}
-          /* 2. Expone el estado inválido cuando errorMessage tiene texto */
           aria-invalid={!!errorMessage}
-          /* 3. Conecta el input con el contenedor del error para lectores de pantalla */
           aria-describedby={errorMessage ? "session-code-error" : undefined}
           className="text-center font-mono uppercase tracking-widest"
         />
@@ -101,4 +82,4 @@ export default function SessionFormJoin() {
       </Button>
     </form>
   );
-}
+} 

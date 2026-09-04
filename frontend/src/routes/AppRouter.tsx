@@ -6,14 +6,7 @@ import LandingPage from "../pages/landingPage";
 import { getAuthToken, loader as tokenLoader } from "../hooks/useTokenDuration";
 import { Home } from "../pages/Home";
 import SessionLobby from "../components/SessionLobby/SessionLobby";
-
-function requireAuth() {
-  const token = getAuthToken();
-  if (!token || token === "EXPIRED") {
-    return redirect("/auth/login");
-  }
-  return null;
-}
+import ProtectedRoute from "./ProtectedRoute"; // <-- Importar el wrapper
 
 function redirectAuthenticated() {
   const token = getAuthToken();
@@ -36,25 +29,29 @@ export const router = createBrowserRouter([
         loader: redirectAuthenticated,
         element: <LandingPage />,
       },
+      // 🛡️ Todas las rutas privadas agrupadas bajo el wrapper ProtectedRoute
       {
-        path: "home",
-        loader: requireAuth,
-        element: <Home />,
+        element: <ProtectedRoute />,
         children: [
           {
-            index: true,
-            element: <SessionLobby />,
+            path: "home",
+            element: <Home />,
+            children: [
+              {
+                index: true,
+                element: <SessionLobby />,
+              },
+            ],
+          },
+          {
+            path: "session/:code",
+            element: (
+              <div className="flex h-screen items-center justify-center text-xl font-bold">
+                Placeholder Tablero de Votación (Sesión en desarrollo)
+              </div>
+            ),
           },
         ],
-      },
-      {
-        path: "session/:code",
-        loader: requireAuth,
-        element: (
-          <div className="flex h-screen items-center justify-center text-xl font-bold">
-            Placeholder Tablero de Votación (Sesión en desarrollo)
-          </div>
-        ),
       },
       ...authRoutes,
     ],
