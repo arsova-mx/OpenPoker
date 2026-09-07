@@ -1,20 +1,12 @@
-import { createBrowserRouter } from "react-router-dom";
-import { redirect } from "react-router-dom";
+import { createBrowserRouter, redirect } from "react-router-dom";
 import Root from "./Root";
 import ErrorGlobal from "../pages/ErrorGlobal";
 import { authRoutes } from "./authRoutes";
 import LandingPage from "../pages/landingPage";
 import { getAuthToken, loader as tokenLoader } from "../hooks/useTokenDuration";
-import Dashboard from "../pages/Dashboard";
 import { Home } from "../pages/Home";
-
-function requireAuth() {
-  const token = getAuthToken();
-  if (!token || token === "EXPIRED") {
-    return redirect("/auth/login");
-  }
-  return null;
-}
+import SessionLobby from "../components/SessionLobby/SessionLobby";
+import ProtectedRoute from "./ProtectedRoute"; // <-- Importar el wrapper
 
 function redirectAuthenticated() {
   const token = getAuthToken();
@@ -35,23 +27,33 @@ export const router = createBrowserRouter([
       {
         index: true,
         loader: redirectAuthenticated,
-        element: <LandingPage/>,
+        element: <LandingPage />,
       },
-
+      // 🛡️ Todas las rutas privadas agrupadas bajo el wrapper ProtectedRoute
       {
-        path: "home",
-        loader: requireAuth,
-        element: <Home />,
+        element: <ProtectedRoute />,
         children: [
           {
-            index: true,
-            element: <Dashboard />,
+            path: "home",
+            element: <Home />,
+            children: [
+              {
+                index: true,
+                element: <SessionLobby />,
+              },
+            ],
+          },
+          {
+            path: "session/:code",
+            element: (
+              <div className="flex h-screen items-center justify-center text-xl font-bold">
+                Placeholder Tablero de Votación (Sesión en desarrollo)
+              </div>
+            ),
           },
         ],
       },
-
       ...authRoutes,
-      
     ],
   },
-])
+]);
