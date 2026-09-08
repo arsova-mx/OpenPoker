@@ -1,15 +1,18 @@
-import { FIBONACCI_CARDS } from "@/types";
+export interface CardOption {
+  id: string;
+  value: string;
+}
 
 interface CardDeckProps {
-  cards?: string[];
-  selectedCard: string | null;
-  onSelectCard: (value: string) => void;
+  cards: CardOption[];
+  selectedCardId: string | null;
+  onSelectCard: (cardId: string) => void;
   disabled?: boolean;
 }
 
 export const CardDeck = ({
-  cards = FIBONACCI_CARDS,
-  selectedCard,
+  cards,
+  selectedCardId,
   onSelectCard,
   disabled = false,
 }: CardDeckProps) => {
@@ -17,17 +20,17 @@ export const CardDeck = ({
     <div
       className="flex flex-wrap items-center justify-center gap-3 p-4"
       role="group"
-      aria-label="Baraja de cartas para estimación"
+      aria-label="Baraja de cartas"
     >
       {cards.map((card) => {
-        const isSelected = selectedCard === card;
+        const isSelected = selectedCardId === card.id;
 
         return (
           <button
-            key={card}
+            key={card.id}
             type="button"
             disabled={disabled}
-            onClick={() => onSelectCard(card)}
+            onClick={() => onSelectCard(card.id)}
             aria-pressed={isSelected}
             className={`
               relative flex h-24 w-16 select-none items-center justify-center rounded-xl border-2 font-bold text-xl transition-all duration-200
@@ -39,7 +42,7 @@ export const CardDeck = ({
               ${disabled ? "cursor-not-allowed opacity-50 hover:translate-y-0 hover:shadow-none" : "cursor-pointer"}
             `}
           >
-            <span>{card}</span>
+            <span>{card.value}</span>
           </button>
         );
       })}

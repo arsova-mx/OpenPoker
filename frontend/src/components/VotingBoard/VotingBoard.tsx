@@ -2,26 +2,29 @@ import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { sessionServices } from "@/api/services/sessionServices";
 import { ticketService, type TicketResponse } from "@/api/services/ticketService";
+import { cardDeckService } from "@/api/services/cardDeckService";
 import { useVoting } from "@/hooks/useVoting";
 import useAuthStore from "@/store/authStore";
 import CardDeck from "../CardDeck/CardDeck";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { SessionResponse } from "@/types";
+import type { SessionResponse, CardValueResponse } from "@/types";
 
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const currentUsername = useAuthStore((state) => state.username);
 
-  // Estados de sesión y tickets
+  // Estados de sesión, baraja y tickets
   const [session, setSession] = useState<SessionResponse | null>(null);
+  const [deckCards, setDeckCards] = useState<CardValueResponse[]>([]);
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
 
-  // Estado para crear nuevo ticket
+  // Estado para crear nuevo ticket y toggle del formulario
   const [newTitle, setNewTitle] = useState("");
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   // Hook de votación enlazado al ticket activo
   const {
@@ -37,13 +40,22 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
-  // 1. Cargar detalles de sesión
+  // 1. Cargar detalles de sesión y baraja
   useEffect(() => {
     if (!code) return;
     sessionServices.getSession(code).then((data) => setSession(data));
+
+    cardDeckService
+      .getDeckBySeries("FIBONACCI")
+      .then((deck) => {
+        if (deck?.cards) {
+          setDeckCards(deck.cards);
+        }
+      })
+      .catch(() => {});
   }, [code]);
 
-  // 2. Cargar tickets de la sala con detección tolerante de campos
+  // 2. Cargar tickets de la sala
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -51,25 +63,38 @@ export default function VotingBoard() {
       const data: any[] = await ticketService.getBySession(session.id);
       setTickets(data);
 
-      // Detecta tanto status como ticketStatus y title como tittle
-      const current = data.find(
-        (t) =>
-          t.status === "VOTING" ||
-          t.ticketStatus === "VOTING" ||
-          t.status === "REVEALED" ||
-          t.ticketStatus === "REVEALED"
-      );
+      setActiveTicket((prev) => {
+        if (!prev) {
+          const current = data.find(
+            (t) =>
+              t.status === "VOTING" ||
+              t.ticketStatus === "VOTING" ||
+              t.status === "REVEALED" ||
+              t.ticketStatus === "REVEALED"
+          );
+          return current ? {
+            id: current.id,
+            title: current.title || current.tittle || "Ticket",
+            gameSessionId: current.gameSessionId || session.id,
+            status: current.status || current.ticketStatus,
+          } : null;
+        }
 
-      if (current) {
-        setActiveTicket({
-          id: current.id,
-          title: current.title || current.tittle || "Ticket sin título",
-          gameSessionId: current.gameSessionId || session.id,
-          status: current.status || current.ticketStatus,
-        });
-      }
+        // Buscar el ticket actualizado en la lista
+        const serverTicket = data.find((t) => t.id === prev.id);
+        if (!serverTicket) return prev;
+
+        const serverStatus = serverTicket.status || serverTicket.ticketStatus;
+
+        return {
+          id: serverTicket.id,
+          title: serverTicket.title || serverTicket.tittle || prev.title,
+          gameSessionId: serverTicket.gameSessionId || session.id,
+          status: serverStatus || prev.status,
+        };
+      });
     } catch {
-      // Manejado globalmente por el interceptor de Axios
+      // Manejado por interceptor
     }
   }, [session?.id]);
 
@@ -77,7 +102,47 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // 3. Crear nuevo ticket e iniciar votación de inmediato
+  // 3. Cambiar estado de cualquier ticket y actualizar UI inmediatamente
+  const handleChangeTicketStatus = async (
+    e: React.MouseEvent,
+    ticketId: string,
+    newStatus: "WAITING" | "VOTING" | "FINISHED" | "REVEALED"
+  ) => {
+    e.stopPropagation();
+    try {
+      await ticketService.updateStatus(ticketId, newStatus);
+
+      // Actualizar estado activo en tiempo real
+      setActiveTicket((prev) => {
+        if (!prev || prev.id === ticketId) {
+          const target = tickets.find((item) => item.id === ticketId);
+          return target ? { ...target, status: newStatus } : null;
+        }
+        if (newStatus === "VOTING") {
+          const target = tickets.find((item) => item.id === ticketId);
+          return target ? { ...target, status: "VOTING" } : prev;
+        }
+        return prev;
+      });
+
+      // Actualizar lista local de inmediato
+      setTickets((prev) =>
+        prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus } : t))
+      );
+
+      await loadTickets();
+    } catch (err) {
+      console.error("Error al actualizar estatus del ticket:", err);
+    }
+  };
+
+  // 4. Seleccionar un ticket para ver sus detalles en mesa
+  const handleSelectTicket = (ticket: TicketResponse) => {
+    setActiveTicket(ticket);
+    setShowCreateForm(false);
+  };
+
+  // 5. Crear ticket nuevo
   const handleCreateTicket = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !session?.id) return;
@@ -90,10 +155,8 @@ export default function VotingBoard() {
         gameSessionId: session.id,
       });
 
-      // Pasar a estado VOTING en base de datos
       await ticketService.updateStatus(created.id, "VOTING");
 
-      // Transición directa en UI sin esperar round-trip de red
       setActiveTicket({
         id: created.id,
         title: created.title || created.tittle || newTitle.trim(),
@@ -102,20 +165,11 @@ export default function VotingBoard() {
       });
 
       setNewTitle("");
+      setShowCreateForm(false);
       await loadTickets();
     } finally {
       setIsCreatingTicket(false);
     }
-  };
-
-  // 4. Iniciar votación de un ticket existente en WAITING
-  const handleStartVoting = async (ticket: TicketResponse) => {
-    await ticketService.updateStatus(ticket.id, "VOTING");
-    setActiveTicket({
-      ...ticket,
-      status: "VOTING",
-    });
-    await loadTickets();
   };
 
   return (
@@ -135,7 +189,16 @@ export default function VotingBoard() {
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {isHost && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowCreateForm(!showCreateForm)}
+            >
+              {showCreateForm ? "Cerrar creador" : "+ Crear ticket"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => navigate("/home")}>
             Volver al lobby
           </Button>
@@ -152,58 +215,126 @@ export default function VotingBoard() {
         </div>
       </header>
 
-      {/* Si NO hay ticket activo */}
-      {!activeTicket && (
-        <section className="w-full max-w-md my-auto bg-card border border-border p-6 rounded-xl shadow-sm text-center space-y-4">
-          <h2 className="text-lg font-semibold">No hay ningún ticket en votación</h2>
-          {isHost ? (
-            <form onSubmit={handleCreateTicket} className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Crea una historia para iniciar la estimación:
-              </p>
-              <Input
-                placeholder="Título del ticket (ej. US-101 Login)"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                disabled={isCreatingTicket}
-              />
-              <Button type="submit" disabled={!newTitle.trim() || isCreatingTicket} className="w-full">
-                {isCreatingTicket ? "Creando..." : "Crear e Iniciar Votación"}
-              </Button>
-            </form>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Esperando a que el host inicie la estimación de un ticket...
-            </p>
-          )}
-
-          {/* Si hay tickets pendientes en WAITING creados previamente */}
-          {isHost && tickets.length > 0 && (
-            <div className="pt-4 border-t border-border text-left">
-              <span className="text-xs font-semibold text-muted-foreground uppercase">
-                Tickets en espera:
-              </span>
-              <ul className="mt-2 space-y-2">
-                {tickets
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  .filter((t: any) => (t.status || t.ticketStatus) === "WAITING")
-                  .map((t) => (
-                    <li key={t.id} className="flex justify-between items-center bg-muted/40 p-2 rounded-md">
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      <span className="text-sm font-medium">{t.title || (t as any).tittle}</span>
-                      <Button size="sm" variant="secondary" onClick={() => handleStartVoting(t)}>
-                        Votar
-                      </Button>
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
+      {/* Formulario desplegable para crear más tickets */}
+      {showCreateForm && isHost && (
+        <section className="w-full max-w-4xl my-4 p-4 bg-muted/40 border border-border rounded-xl">
+          <h2 className="text-sm font-semibold mb-2">Crear nuevo ticket en esta sala</h2>
+          <form onSubmit={handleCreateTicket} className="flex gap-2">
+            <Input
+              placeholder="Título del ticket (ej. US-204 Notificaciones)"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              disabled={isCreatingTicket}
+              className="bg-background"
+            />
+            <Button type="submit" disabled={!newTitle.trim() || isCreatingTicket}>
+              {isCreatingTicket ? "Creando..." : "Crear e Iniciar"}
+            </Button>
+          </form>
         </section>
       )}
 
-      {/* Si SÍ hay ticket activo */}
-      {activeTicket && (
+      {/* Backlog de tickets con controles de estado */}
+      <section className="w-full max-w-4xl my-4 bg-card p-4 rounded-xl border border-border shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Tickets en la Sala ({tickets.length})
+          </h2>
+          {activeTicket && (
+            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-medium">
+              Viendo en mesa: {activeTicket.title}
+            </span>
+          )}
+        </div>
+
+        {tickets.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No hay tickets registrados aún.</p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {tickets.map((t) => {
+              const isCurrent = activeTicket?.id === t.id;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const status = t.status || (t as any).ticketStatus;
+
+              return (
+                <li key={t.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div
+                    className="flex items-center gap-3 cursor-pointer hover:opacity-80"
+                    onClick={() => handleSelectTicket(t)}
+                  >
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        status === "VOTING"
+                          ? "bg-amber-500 animate-pulse"
+                          : status === "REVEALED" || status === "FINISHED"
+                          ? "bg-green-500"
+                          : "bg-muted-foreground"
+                      }`}
+                    />
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <span className={`text-sm ${isCurrent ? "font-bold text-primary underline" : "text-foreground"}`}>
+                      {t.title || (t as any).tittle}
+                    </span>
+                    <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Acciones de Host para cambiar estatus */}
+                  {isHost && (
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        size="sm"
+                        variant={isCurrent ? "default" : "outline"}
+                        className="h-8 text-xs"
+                        onClick={() => handleSelectTicket(t)}
+                      >
+                        {isCurrent ? "En mesa" : "Ver detalles"}
+                      </Button>
+
+                      {status !== "VOTING" && status !== "FINISHED" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-xs bg-amber-500/10 text-amber-600 hover:bg-amber-500/20"
+                          onClick={(e) => handleChangeTicketStatus(e, t.id, "VOTING")}
+                        >
+                          Activar Votación
+                        </Button>
+                      )}
+
+                      {status === "VOTING" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={(e) => handleChangeTicketStatus(e, t.id, "WAITING")}
+                        >
+                          Pausar
+                        </Button>
+                      )}
+
+                      {status !== "FINISHED" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                          onClick={(e) => handleChangeTicketStatus(e, t.id, "FINISHED")}
+                        >
+                          Finalizar
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      {/* Mesa central de votación */}
+      {activeTicket ? (
         <>
           {votingError && (
             <section
@@ -216,7 +347,7 @@ export default function VotingBoard() {
 
           <div className="text-center my-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Estimando:
+              Estimando ({activeTicket.status}):
             </span>
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
@@ -224,7 +355,7 @@ export default function VotingBoard() {
           {/* Participantes */}
           <section className="w-full max-w-4xl my-4">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
-              Participantes ({votes.length})
+              Participantes en la sala: {session?.participantCount ?? 1} (Votos: {votes.length})
             </h3>
             {votes.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-6">
@@ -254,26 +385,35 @@ export default function VotingBoard() {
             )}
           </section>
 
-          {/* Baraja y botón de voto */}
+          {/* Baraja */}
           <section className="w-full max-w-4xl flex flex-col items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Elige tu carta
             </h3>
             <CardDeck
-              selectedCard={selectedCard}
+              cards={deckCards}
+              selectedCardId={selectedCard}
               onSelectCard={setSelectedCard}
-              disabled={votingLoading || revealed}
+              disabled={votingLoading || revealed || activeTicket.status !== "VOTING"}
             />
             <Button
               onClick={castVote}
-              disabled={!selectedCard || votingLoading || revealed}
+              disabled={!selectedCard || votingLoading || revealed || activeTicket.status !== "VOTING"}
               size="lg"
               className="w-full sm:w-64"
             >
-              {votingLoading ? "Enviando..." : "Enviar voto"}
+              {activeTicket.status !== "VOTING"
+                ? `Ticket en estado ${activeTicket.status}`
+                : votingLoading
+                ? "Enviando..."
+                : "Enviar voto"}
             </Button>
           </section>
         </>
+      ) : (
+        <section className="text-center my-12 text-muted-foreground">
+          <p>Selecciona un ticket del listado arriba o crea uno nuevo para comenzar la votación.</p>
+        </section>
       )}
     </main>
   );
