@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { sessionServices } from "@/api/services/sessionServices";
-import { ticketService, type TicketResponse } from "@/api/services/ticketService";
+import { ticketService, type TicketResponse, type TicketStatus } from "@/api/services/ticketService";
 import { cardDeckService } from "@/api/services/cardDeckService";
 import { useVoting } from "@/hooks/useVoting";
 import useAuthStore from "@/store/authStore";
@@ -55,46 +55,31 @@ export default function VotingBoard() {
       .catch(() => {});
   }, [code]);
 
-  // 2. Cargar tickets de la sala
+  // 2. Cargar tickets de la sala directamente tipados y normalizados
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any[] = await ticketService.getBySession(session.id);
+      const data = await ticketService.getBySession(session.id);
       setTickets(data);
 
       setActiveTicket((prev) => {
         if (!prev) {
-          const current = data.find(
-            (t) =>
-              t.status === "VOTING" ||
-              t.ticketStatus === "VOTING" ||
-              t.status === "REVEALED" ||
-              t.ticketStatus === "REVEALED"
-          );
-          return current ? {
-            id: current.id,
-            title: current.title || current.tittle || "Ticket",
-            gameSessionId: current.gameSessionId || session.id,
-            status: current.status || current.ticketStatus,
-          } : null;
+          const current = data.find((t) => t.status === "VOTING" || t.status === "REVEALED");
+          return current || null;
         }
 
-        // Buscar el ticket actualizado en la lista
         const serverTicket = data.find((t) => t.id === prev.id);
         if (!serverTicket) return prev;
 
-        const serverStatus = serverTicket.status || serverTicket.ticketStatus;
+        // Si en local lo acabas de activar a VOTING, no permitir que un snapshot viejo lo degrade
+        if (prev.status === "VOTING" && serverTicket.status === "WAITING") {
+          return { ...serverTicket, status: "VOTING" };
+        }
 
-        return {
-          id: serverTicket.id,
-          title: serverTicket.title || serverTicket.tittle || prev.title,
-          gameSessionId: serverTicket.gameSessionId || session.id,
-          status: serverStatus || prev.status,
-        };
+        return serverTicket;
       });
     } catch {
-      // Manejado por interceptor
+      // Manejado por interceptor global
     }
   }, [session?.id]);
 
@@ -104,15 +89,14 @@ export default function VotingBoard() {
 
   // 3. Cambiar estado de cualquier ticket y actualizar UI inmediatamente
   const handleChangeTicketStatus = async (
-    e: React.MouseEvent,
+    e: MouseEvent,
     ticketId: string,
-    newStatus: "WAITING" | "VOTING" | "FINISHED" | "REVEALED"
+    newStatus: TicketStatus
   ) => {
     e.stopPropagation();
     try {
       await ticketService.updateStatus(ticketId, newStatus);
 
-      // Actualizar estado activo en tiempo real
       setActiveTicket((prev) => {
         if (!prev || prev.id === ticketId) {
           const target = tickets.find((item) => item.id === ticketId);
@@ -125,7 +109,6 @@ export default function VotingBoard() {
         return prev;
       });
 
-      // Actualizar lista local de inmediato
       setTickets((prev) =>
         prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus } : t))
       );
@@ -149,8 +132,7 @@ export default function VotingBoard() {
 
     setIsCreatingTicket(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const created: any = await ticketService.createTicket({
+      const created = await ticketService.createTicket({
         title: newTitle.trim(),
         gameSessionId: session.id,
       });
@@ -158,9 +140,7 @@ export default function VotingBoard() {
       await ticketService.updateStatus(created.id, "VOTING");
 
       setActiveTicket({
-        id: created.id,
-        title: created.title || created.tittle || newTitle.trim(),
-        gameSessionId: session.id,
+        ...created,
         status: "VOTING",
       });
 
@@ -253,8 +233,6 @@ export default function VotingBoard() {
           <ul className="divide-y divide-border">
             {tickets.map((t) => {
               const isCurrent = activeTicket?.id === t.id;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const status = t.status || (t as any).ticketStatus;
 
               return (
                 <li key={t.id} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -264,19 +242,18 @@ export default function VotingBoard() {
                   >
                     <span
                       className={`h-2.5 w-2.5 rounded-full ${
-                        status === "VOTING"
+                        t.status === "VOTING"
                           ? "bg-amber-500 animate-pulse"
-                          : status === "REVEALED" || status === "FINISHED"
+                          : t.status === "REVEALED" || t.status === "FINISHED"
                           ? "bg-green-500"
                           : "bg-muted-foreground"
                       }`}
                     />
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     <span className={`text-sm ${isCurrent ? "font-bold text-primary underline" : "text-foreground"}`}>
-                      {t.title || (t as any).tittle}
+                      {t.title}
                     </span>
                     <span className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
-                      {status}
+                      {t.status}
                     </span>
                   </div>
 
@@ -292,7 +269,7 @@ export default function VotingBoard() {
                         {isCurrent ? "En mesa" : "Ver detalles"}
                       </Button>
 
-                      {status !== "VOTING" && status !== "FINISHED" && (
+                      {t.status !== "VOTING" && t.status !== "FINISHED" && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -303,7 +280,7 @@ export default function VotingBoard() {
                         </Button>
                       )}
 
-                      {status === "VOTING" && (
+                      {t.status === "VOTING" && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -314,7 +291,7 @@ export default function VotingBoard() {
                         </Button>
                       )}
 
-                      {status !== "FINISHED" && (
+                      {t.status !== "FINISHED" && (
                         <Button
                           size="sm"
                           variant="outline"

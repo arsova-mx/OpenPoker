@@ -96,11 +96,12 @@ public class VoteService {
         // Obtenemos el conteo directo desde el repositorio en vez de cargar toda la lista en memoria
         long voteCount = voteRepository.countByTicketId(ticketId);
 
-
+        /* 
         if (participantCount > 0 && voteCount >= participantCount) {
             ticket.setStatus(TicketStatus.WAITING);
             sessionRepository.save(session);
         }
+        */
 
         return new VoteResponse(savedVote.getId(),participant.getEffectiveName(), savedVote.getCardValue().getValue(), savedVote.getUpdatedAt());
     }
@@ -168,29 +169,28 @@ public class VoteService {
         return voteStatus;
     }
     @Transactional
-    public VotingRRAverage revealVotes(UUID sessionId, UUID participantId,UUID ticketId) {
-        GameSession session = sessionRepository.findById(sessionId).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId).orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+    public VotingRRAverage revealVotes(UUID sessionId, UUID participantId, UUID ticketId) {
+        GameSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        Ticket ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
         if (ticket.getStatus() == TicketStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");
         }
 
-            // 🚀 REGLA FLEXIBLE: Permitir revelar si está en WAITING O si está en VOTING con timer expirado
-        boolean isWaiting = ticket.getStatus() == TicketStatus.WAITING;
-        boolean isVotingAndExpired = ticket.getStatus() == TicketStatus.VOTING && ticket.getTimerExpiresAt() != null && Instant.now().isAfter(ticket.getTimerExpiresAt());
-
-        if (!isWaiting && !isVotingAndExpired) {
-            throw new SessionNotInVotingException("La votación sigue activa y el tiempo no ha expirado");
+        if (ticket.getStatus() == TicketStatus.REVEALED) {
+            throw new SessionNotInVotingException("Los votos ya han sido revelados");
         }
 
-        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
+        Participant participant = participantRepository.findById(participantId)
+                .orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
 
         if (!participant.getGameSession().getId().equals(sessionId)) {
             throw new UsernameIsNotParticipantSessionException("Participante no pertenece a la sesion");
         }
 
-        if(participant.getRole() != Participant.Role.HOST) {
+        if (participant.getRole() != Participant.Role.HOST) {
             throw new OnlyHostCanRevealVotesException("Solo el host puede revelar");
         }
 
@@ -204,13 +204,13 @@ public class VoteService {
         // 2. Calcular promedio basado en weight (ignorar peso 0 como '?' o '☕')
         VoteStatisticsDTO statistics = voteStatisticsService.calculateStatistics(votes);
         
-            // 3. Buscar la carta sugerida más cercana por peso
+        // 3. Buscar la carta sugerida más cercana por peso
         CardValue suggested = cardValueRepository.findClosestByWeight(
             session.getDeck().getId(), statistics.average());
 
         // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
-            .map(v -> new VoteResponse(v.getId(),v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
+            .map(v -> new VoteResponse(v.getId(), v.getParticipant().getEffectiveName(), v.getCardValue().getValue(), v.getUpdatedAt()))
             .toList();
 
         // 5. Retornar el nuevo DTO que incluye la sugerencia
