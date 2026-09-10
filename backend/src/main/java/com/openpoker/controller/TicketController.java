@@ -53,7 +53,8 @@ public class TicketController {
             savedTicket.getId(),
             savedTicket.getTittle(),
             savedTicket.getDescription(),
-            savedTicket.getGameSession().getId()
+            savedTicket.getGameSession().getId(),
+            savedTicket.getStatus()
         );
     }
 
@@ -68,7 +69,8 @@ public class TicketController {
                     t.getId(),
                     t.getTittle(),       // Mantén el typo 'getTittle()' si aún está así en tu entidad original
                     t.getDescription(),
-                    t.getGameSession().getId()
+                    t.getGameSession().getId(),
+                    t.getStatus()
                 ))
                 .toList();
 

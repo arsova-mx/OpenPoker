@@ -7,6 +7,7 @@ import { getAuthToken, loader as tokenLoader } from "../hooks/useTokenDuration";
 import { Home } from "../pages/Home";
 import SessionLobby from "../components/SessionLobby/SessionLobby";
 import ProtectedRoute from "./ProtectedRoute"; // <-- Importar el wrapper
+import VotingBoard from "../components/VotingBoard/VotingBoard";
 
 function redirectAuthenticated() {
   const token = getAuthToken();
@@ -45,11 +46,7 @@ export const router = createBrowserRouter([
           },
           {
             path: "session/:code",
-            element: (
-              <div className="flex h-screen items-center justify-center text-xl font-bold">
-                Placeholder Tablero de Votación (Sesión en desarrollo)
-              </div>
-            ),
+            element: <VotingBoard />,
           },
         ],
       },
