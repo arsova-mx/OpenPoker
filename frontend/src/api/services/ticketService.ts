@@ -16,24 +16,24 @@ export interface CreateTicketRequest {
   gameSessionId: string;
 }
 
-// Tipo interno para interceptar discrepancias del backend (tittle / ticketStatus)
+// Representa exactamente la carga útil que entrega el backend actualizado
 interface RawTicketBackendResponse {
   id: string;
   title?: string;
   tittle?: string;
   description?: string;
-  gameSessionId?: string;
-  status?: TicketStatus;
-  ticketStatus?: TicketStatus;
+  gameSessionId: string;
+  status: TicketStatus;
 }
 
-// Función pura para devolver siempre un contrato uniforme
+// Normaliza posibles inconsistencias de nombre de campo (title vs tittle)
+// preservando el estado real devuelto por el servidor
 const normalizeTicket = (raw: RawTicketBackendResponse): TicketResponse => ({
   id: raw.id,
   title: raw.title || raw.tittle || "Ticket sin título",
   description: raw.description,
-  gameSessionId: raw.gameSessionId || "",
-  status: raw.status || raw.ticketStatus || "WAITING",
+  gameSessionId: raw.gameSessionId,
+  status: raw.status,
 });
 
 export const ticketService = {
@@ -49,7 +49,7 @@ export const ticketService = {
     return normalizeTicket(response.data);
   },
 
-  // PATCH /api/tickets/{ticketId}/status?newStatus=VOTING
+  // PATCH /api/tickets/{ticketId}/status?newStatus=...
   updateStatus: async (ticketId: string, newStatus: TicketStatus): Promise<TicketResponse> => {
     const response = await instance.patch<RawTicketBackendResponse>(
       `/tickets/${ticketId}/status`,

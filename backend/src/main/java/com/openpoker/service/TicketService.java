@@ -46,7 +46,8 @@ public class TicketService {
             savedTicket.getId(),
             savedTicket.getTittle(),
             savedTicket.getDescription(),
-            savedTicket.getGameSession().getId()
+            savedTicket.getGameSession().getId(),
+            savedTicket.getStatus()
         );
     }
 
@@ -67,7 +68,8 @@ public class TicketService {
                 updatedTicket.getId(),
                 updatedTicket.getTittle(), // Mantén tu propiedad 'tittle'
                 updatedTicket.getDescription(),
-                updatedTicket.getGameSession().getId()
+                updatedTicket.getGameSession().getId(),
+                updatedTicket.getStatus()
         );
     }
 
@@ -98,7 +100,8 @@ public class TicketService {
                 savedTicket.getId(),
                 savedTicket.getTittle(),
                 savedTicket.getDescription(),
-                savedTicket.getGameSession().getId()
+                savedTicket.getGameSession().getId(),
+                savedTicket.getStatus()
         );
     }
 

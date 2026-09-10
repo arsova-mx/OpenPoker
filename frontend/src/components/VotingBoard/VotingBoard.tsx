@@ -15,7 +15,7 @@ export default function VotingBoard() {
   const navigate = useNavigate();
   const currentUsername = useAuthStore((state) => state.username);
 
-  // Estados de sesión, baraja y tickets
+  // Estados de sesión, baraja y tickets tipados estrictamente
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [deckCards, setDeckCards] = useState<CardValueResponse[]>([]);
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
