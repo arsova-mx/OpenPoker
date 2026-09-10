@@ -30,21 +30,18 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
       return;
     }
 
+    // En fetchVotes dentro de useVoting.ts
     try {
       const data = await voteService.getVotes(sessionCode, ticketId);
-
-      // Si el ticket cambió mientras la petición viajaba por la red, se ignora
-      if (activeTicketRef.current !== ticketId) return;
-
-      setVotes(data.votes);
-      setRevealed(data.revealed);
+      setVotes(data?.votes ?? []);
+      setRevealed(data?.revealed ?? false);
     } catch (err: unknown) {
-      if (activeTicketRef.current !== ticketId) return;
-
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || err.message || "Error al sincronizar votos");
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        // Si aún no hay votos inicializados para este ticket, tratamos como lista vacía
+        setVotes([]);
+        setRevealed(false);
       } else {
-        setError("Error al sincronizar votos");
+        // Manejo de otros errores
       }
     }
   }, [sessionCode, ticketId]);
