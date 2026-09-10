@@ -1,5 +1,4 @@
-// frontend/src/hooks/useVoting.ts
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { voteService } from "@/api/services/voteService";
 import { VoteResponse } from "@/types";
@@ -11,17 +10,37 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Consulta los votos del ticket activo
+  // Referencia para rastrear el ticket actual y descartar respuestas desfasadas
+  const activeTicketRef = useRef<string | null>(ticketId);
+
+  // 1. Limpiar estado de la mesa inmediatamente cuando cambia o se deselecciona el ticket
+  useEffect(() => {
+    activeTicketRef.current = ticketId;
+    setSelectedCard(null);
+    setVotes([]);
+    setRevealed(false);
+    setError(null);
+  }, [ticketId]);
+
+  // 2. Consultar los votos del ticket activo
   const fetchVotes = useCallback(async () => {
     if (!sessionCode || !ticketId) {
       setVotes([]);
+      setRevealed(false);
       return;
     }
+
     try {
       const data = await voteService.getVotes(sessionCode, ticketId);
+
+      // Si el ticket cambió mientras la petición viajaba por la red, se ignora
+      if (activeTicketRef.current !== ticketId) return;
+
       setVotes(data.votes);
       setRevealed(data.revealed);
     } catch (err: unknown) {
+      if (activeTicketRef.current !== ticketId) return;
+
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.message || err.message || "Error al sincronizar votos");
       } else {
@@ -30,7 +49,7 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     }
   }, [sessionCode, ticketId]);
 
-  // Polling cada 5 segundos SOLO si hay un ticket activo
+  // 3. Polling cada 5 segundos únicamente cuando existe un ticket seleccionado
   useEffect(() => {
     if (!ticketId) return;
 
@@ -42,7 +61,7 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     };
   }, [fetchVotes, ticketId]);
 
-  // Enviar voto
+  // 4. Enviar voto
   const castVote = async () => {
     if (!selectedCard || !sessionCode || !ticketId) return;
     setLoading(true);
@@ -61,7 +80,7 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     }
   };
 
-  // Revelar votos
+  // 5. Revelar votos
   const revealVotes = async () => {
     if (!sessionCode || !ticketId) return;
     setLoading(true);

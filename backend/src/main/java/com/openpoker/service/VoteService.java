@@ -137,7 +137,7 @@ public class VoteService {
         })
         .toList();
 
-        return new VotingResultsResponse(session.getSessionCode(), response, session.isVotesRevealed());
+        return new VotingResultsResponse(session.getSessionCode(), response, isTicketRevealed);
     }
 
 
