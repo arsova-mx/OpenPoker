@@ -1,9 +1,10 @@
 import * as React from "react";
 import { RiEyeLine, RiEyeOffLine } from "@remixicon/react";
 import { cn } from "@/lib/utils";
+import { Input, type InputProps } from "./input";
 import { InputGroup, InputGroupButton } from "./input-group";
 
-interface PasswordInputProps extends React.ComponentProps<"input"> {}
+interface PasswordInputProps extends InputProps {}
 
 const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
   ({ className, ...props }, ref) => {
@@ -11,13 +12,11 @@ const PasswordInput = React.forwardRef<HTMLInputElement, PasswordInputProps>(
 
     return (
       <InputGroup>
-        <input
+        <Input
           ref={ref}
           type={showPassword ? "text" : "password"}
-          className={cn(
-            "pr-10 h-9 w-full min-w-0 rounded-3xl border border-transparent bg-input/50 px-3 py-1 text-base transition-[color,box-shadow,background-color] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
-            className
-          )}
+          data-slot="input-group-control"
+          className={cn("pr-10", className)}
           {...props}
         />
         <InputGroupButton

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { voteService } from "@/api/services/voteService";
-import { VoteResponse } from "@/types";
+import type { VoteResponse } from "@/types";
 
 export const useVoting = (sessionCode: string, ticketId: string | null) => {
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -10,10 +10,10 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Referencia para rastrear el ticket actual y descartar respuestas desfasadas
+  // Rastrea el ticket actual para descartar respuestas de tickets previos
   const activeTicketRef = useRef<string | null>(ticketId);
 
-  // 1. Limpiar estado de la mesa inmediatamente cuando cambia o se deselecciona el ticket
+  // 1. Limpiar mesa de inmediato al cambiar o deseleccionar ticket
   useEffect(() => {
     activeTicketRef.current = ticketId;
     setSelectedCard(null);
@@ -22,7 +22,7 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     setError(null);
   }, [ticketId]);
 
-  // 2. Consultar los votos del ticket activo
+  // 2. Consultar votos del ticket activo
   const fetchVotes = useCallback(async () => {
     if (!sessionCode || !ticketId) {
       setVotes([]);
@@ -30,18 +30,30 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
       return;
     }
 
-    // En fetchVotes dentro de useVoting.ts
     try {
       const data = await voteService.getVotes(sessionCode, ticketId);
+
+      // Si el ticket cambió mientras la petición viajaba, se ignora la respuesta
+      if (activeTicketRef.current !== ticketId) return;
+
       setVotes(data?.votes ?? []);
       setRevealed(data?.revealed ?? false);
+      setError(null);
     } catch (err: unknown) {
+      // Si el usuario cambió de ticket durante la petición, se ignoran 404 y cualquier otro error
+      if (activeTicketRef.current !== ticketId) return;
+
       if (axios.isAxiosError(err) && err.response?.status === 404) {
-        // Si aún no hay votos inicializados para este ticket, tratamos como lista vacía
+        // Ticket nuevo sin votos inicializados aún
         setVotes([]);
         setRevealed(false);
+        setError(null);
+      } else if (axios.isAxiosError(err)) {
+        // Errores HTTP reales (400, 403, 500, etc.)
+        setError(err.response?.data?.message || err.message || "Error al sincronizar votos");
       } else {
-        // Manejo de otros errores
+        // Errores de red o inesperados
+        setError("Error al sincronizar votos");
       }
     }
   }, [sessionCode, ticketId]);
@@ -67,10 +79,12 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
       await voteService.castVote(sessionCode, ticketId, { cardValue: selectedCard });
       await fetchVotes();
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || err.message || "Error al registrar el voto");
-      } else {
-        setError("Error al registrar el voto");
+      if (activeTicketRef.current === ticketId) {
+        if (axios.isAxiosError(err)) {
+          setError(err.response?.data?.message || err.message || "Error al registrar el voto");
+        } else {
+          setError("Error al registrar el voto");
+        }
       }
     } finally {
       setLoading(false);
@@ -84,13 +98,17 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     setError(null);
     try {
       const data = await voteService.revealVotes(sessionCode, ticketId);
-      setVotes(data.votes);
-      setRevealed(data.revealed);
+      if (activeTicketRef.current === ticketId) {
+        setVotes(data.votes);
+        setRevealed(data.revealed);
+      }
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.message || err.message || "Error al revelar votos");
-      } else {
-        setError("Error al revelar votos");
+      if (activeTicketRef.current === ticketId) {
+        if (axios.isAxiosError(err)) {
+          setError(err.response?.data?.message || err.message || "Error al revelar votos");
+        } else {
+          setError("Error al revelar votos");
+        }
       }
     } finally {
       setLoading(false);

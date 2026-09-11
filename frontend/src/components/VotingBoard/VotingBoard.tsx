@@ -14,10 +14,13 @@ import type { SessionResponse, CardValueResponse, Participant } from "@/types";
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const currentUsername = useAuthStore((state) => state.username);
+  const rawUsername = useAuthStore((state) => state.username);
   const token = useAuthStore((state) => state.token);
 
-  // Estados de sesión, baraja y tickets tipados estrictamente
+  // Fallback seguro: si el store aún no hidrata el username, consulta localStorage o usa un alias legible
+  const currentUsername = rawUsername || localStorage.getItem("username") || "Participante";
+
+  // Estados de sesión, baraja y tickets
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [deckCards, setDeckCards] = useState<CardValueResponse[]>([]);
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
@@ -63,17 +66,16 @@ export default function VotingBoard() {
       .catch(() => {});
   }, [code]);
 
-  // 2. Conexión WebSocket STOMP: Join y suscripción a participantes en tiempo real
+  // 2. Conexión WebSocket STOMP: Join seguro y suscripción a participantes
   useEffect(() => {
-    if (!wsConnected || !code) return;
+    // Validamos que haya conexión, código y un nombre definido antes de emitir
+    if (!wsConnected || !code || !currentUsername) return;
 
-    // Notificar al backend que entramos a la sala
     publish("/app/session.join", {
       inviteCode: code,
       username: currentUsername,
     });
 
-    // Suscribirse al canal de participantes
     const sub = subscribe(`/topic/session/${code}/participants`, (data: Participant[]) => {
       if (Array.isArray(data)) {
         setParticipants(data);
@@ -101,7 +103,6 @@ export default function VotingBoard() {
         const serverTicket = data.find((t) => t.id === prev.id);
         if (!serverTicket) return prev;
 
-        // Evita que un snapshot desactualizado degrade un ticket recién activado a VOTING
         if (prev.status === "VOTING" && serverTicket.status === "WAITING") {
           return { ...serverTicket, status: "VOTING" };
         }
@@ -182,7 +183,6 @@ export default function VotingBoard() {
     }
   };
 
-  // Conteo reactivo priorizando la cantidad devuelta por WebSocket
   const totalParticipants = participants.length > 0 ? participants.length : (session?.participantCount ?? 1);
 
   return (
@@ -248,7 +248,6 @@ export default function VotingBoard() {
             participants.map((p, index) => {
               const participantName = p.username ?? p.displayName ?? "Participante";
               const isMe = participantName === currentUsername;
-              // Fallback de clave para evitar advertencias de React si p.id llega nulo o repetido
               const itemKey = p.id || `${participantName}-${index}`;
 
               return (
