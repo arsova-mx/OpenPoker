@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Client, IMessage, StompSubscription } from "@stomp/stompjs";
 
-// Función utilitaria para enmascarar tokens JWT en las cadenas de log
 function sanitizeStompLog(message: string): string {
   return message.replace(
     /(Authorization:\s*(?:Bearer\s+)?)[^\r\n]+/gi,
@@ -25,25 +24,30 @@ export function useStompClient(token?: string | null) {
     const client = new Client({
       brokerURL,
       connectHeaders: headers,
-      // Solo loguea si estamos en desarrollo y oculta la cabecera Authorization
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
       debug: (str) => {
         if (import.meta.env.DEV) {
           console.log("[STOMP]", sanitizeStompLog(str));
         }
       },
-      reconnectDelay: 5000,
-      heartbeatIncoming: 4000,
-      heartbeatOutgoing: 4000,
       onConnect: () => {
         setConnected(true);
       },
+      // Cierre ordenado por protocolo STOMP
       onDisconnect: () => {
+        setConnected(false);
+      },
+      // Caída inesperada del socket subyacente (cortes de red, timeouts)
+      onWebSocketClose: () => {
         setConnected(false);
       },
       onStompError: (frame) => {
         if (import.meta.env.DEV) {
           console.error("STOMP error:", frame.headers["message"]);
         }
+        setConnected(false);
       },
     });
 

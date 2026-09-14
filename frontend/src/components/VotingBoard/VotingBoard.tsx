@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent, type MouseEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type FormEvent, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { sessionServices } from "@/api/services/sessionServices";
 import { ticketService, type TicketResponse, type TicketStatus } from "@/api/services/ticketService";
@@ -14,11 +14,16 @@ import type { SessionResponse, CardValueResponse, Participant } from "@/types";
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const rawUsername = useAuthStore((state) => state.username);
-  const token = useAuthStore((state) => state.token);
 
-  // Fallback seguro: si el store aún no hidrata el username, consulta localStorage o usa un alias legible
+  // 1. Obtener token unificado (Zustand con fallback a localStorage persistido)
+  const storeToken = useAuthStore((state) => state.token);
+  const effectiveToken = useMemo(() => {
+    return storeToken || localStorage.getItem("token");
+  }, [storeToken]);
+
+  const rawUsername = useAuthStore((state) => state.username);
   const currentUsername = rawUsername || localStorage.getItem("username") || "Participante";
+  const isGuest = !effectiveToken;
 
   // Estados de sesión, baraja y tickets
   const [session, setSession] = useState<SessionResponse | null>(null);
@@ -26,18 +31,17 @@ export default function VotingBoard() {
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
 
-  // Estado reactivo de participantes vía WebSocket
+  // Estado de participantes
   const [participants, setParticipants] = useState<Participant[]>([]);
 
-  // Conexión STOMP nativa
-  const { connected: wsConnected, subscribe, publish } = useStompClient(token);
+  // Conexión STOMP con el token verificado
+  const { connected: wsConnected, subscribe, publish } = useStompClient(effectiveToken);
 
-  // Estado para crear nuevo ticket y toggle del formulario
+  // Formulario de ticket
   const [newTitle, setNewTitle] = useState("");
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Hook de votación enlazado al ticket activo
   const {
     selectedCard,
     setSelectedCard,
@@ -51,7 +55,7 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
-  // 1. Cargar detalles de sesión y baraja
+  // Cargar sala y baraja inicial
   useEffect(() => {
     if (!code) return;
     sessionServices.getSession(code).then((data) => setSession(data));
@@ -66,27 +70,35 @@ export default function VotingBoard() {
       .catch(() => {});
   }, [code]);
 
-  // 2. Conexión WebSocket STOMP: Join seguro y suscripción a participantes
+  // Ciclo STOMP: Suscribirse primero, publicar join después
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername) return;
 
-    publish("/app/session.join", {
-      inviteCode: code,
-      username: currentUsername,
-    });
-
+    // 1. Suscribirse antes de emitir para capturar el snapshot inicial
     const sub = subscribe(`/topic/session/${code}/participants`, (data: Participant[]) => {
       if (Array.isArray(data)) {
         setParticipants(data);
       }
     });
 
+    // 2. Armar payload diferenciando usuario registrado de invitado
+    const joinPayload: Record<string, string> = {
+      inviteCode: code,
+    };
+
+    if (isGuest) {
+      joinPayload.guestName = currentUsername;
+    } else {
+      joinPayload.username = currentUsername;
+    }
+
+    publish("/app/session.join", joinPayload);
+
     return () => {
       sub?.unsubscribe();
     };
-  }, [wsConnected, code, currentUsername, publish, subscribe]);
+  }, [wsConnected, code, currentUsername, isGuest, publish, subscribe]);
 
-  // 3. Cargar tickets de la sala directamente tipados y normalizados
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -117,7 +129,6 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // 4. Cambiar estado de cualquier ticket y actualizar UI inmediatamente
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -149,13 +160,11 @@ export default function VotingBoard() {
     }
   };
 
-  // 5. Seleccionar un ticket para ver sus detalles en mesa
   const handleSelectTicket = (ticket: TicketResponse) => {
     setActiveTicket(ticket);
     setShowCreateForm(false);
   };
 
-  // 6. Crear ticket nuevo
   const handleCreateTicket = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !session?.id) return;
@@ -186,7 +195,6 @@ export default function VotingBoard() {
 
   return (
     <main className="min-h-screen bg-background p-6 flex flex-col items-center justify-between">
-      {/* Cabecera */}
       <header className="w-full max-w-4xl flex items-center justify-between border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -241,7 +249,7 @@ export default function VotingBoard() {
         </div>
       </header>
 
-      {/* Panel en vivo de Participantes en la Sala */}
+      {/* Panel de participantes en tiempo real */}
       <section className="w-full max-w-4xl my-3 p-3 bg-card border border-border rounded-xl shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -251,12 +259,14 @@ export default function VotingBoard() {
         <div className="flex flex-wrap gap-2">
           {participants.length > 0 ? (
             participants.map((p) => {
-              const participantName = p.username ?? p.displayName ?? "Participante";
+              // Soporte para ambos nombres de clave del DTO
+              const participantKey = p.participantId ?? p.id ?? p.username;
+              const participantName = p.effectiveName ?? p.username ?? p.displayName ?? "Participante";
               const isMe = participantName === currentUsername;
 
               return (
                 <span
-                  key={p.id}
+                  key={participantKey}
                   className={`text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 font-medium ${
                     isMe
                       ? "bg-primary/10 border-primary text-primary"
@@ -279,7 +289,7 @@ export default function VotingBoard() {
         </div>
       </section>
 
-      {/* Formulario desplegable para crear tickets */}
+      {/* Formulario de tickets */}
       {showCreateForm && isHost && (
         <section className="w-full max-w-4xl my-4 p-4 bg-muted/40 border border-border rounded-xl">
           <h2 className="text-sm font-semibold mb-2">Crear nuevo ticket en esta sala</h2>
@@ -298,7 +308,7 @@ export default function VotingBoard() {
         </section>
       )}
 
-      {/* Backlog de tickets con controles de estado */}
+      {/* Backlog */}
       <section className="w-full max-w-4xl my-4 bg-card p-4 rounded-xl border border-border shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -412,7 +422,6 @@ export default function VotingBoard() {
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
 
-          {/* Participantes y votos emitidos */}
           <section className="w-full max-w-4xl my-4">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
               Votos emitidos: {votes.length} de {totalParticipants}
@@ -445,7 +454,6 @@ export default function VotingBoard() {
             )}
           </section>
 
-          {/* Baraja */}
           <section className="w-full max-w-4xl flex flex-col items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Elige tu carta
