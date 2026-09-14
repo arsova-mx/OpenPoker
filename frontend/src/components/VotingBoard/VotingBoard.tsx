@@ -68,7 +68,6 @@ export default function VotingBoard() {
 
   // 2. Conexión WebSocket STOMP: Join seguro y suscripción a participantes
   useEffect(() => {
-    // Validamos que haya conexión, código y un nombre definido antes de emitir
     if (!wsConnected || !code || !currentUsername) return;
 
     publish("/app/session.join", {
@@ -203,11 +202,17 @@ export default function VotingBoard() {
               </span>
             )}
             <span
+              role="status"
+              aria-label={wsConnected ? "WebSocket conectado" : "WebSocket desconectado"}
               className={`inline-block h-2 w-2 rounded-full ${
                 wsConnected ? "bg-green-500" : "bg-red-500"
               }`}
               title={wsConnected ? "WebSocket Conectado" : "Desconectado"}
-            />
+            >
+              <span className="sr-only">
+                {wsConnected ? "WebSocket conectado" : "WebSocket desconectado"}
+              </span>
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -245,14 +250,13 @@ export default function VotingBoard() {
         </div>
         <div className="flex flex-wrap gap-2">
           {participants.length > 0 ? (
-            participants.map((p, index) => {
+            participants.map((p) => {
               const participantName = p.username ?? p.displayName ?? "Participante";
               const isMe = participantName === currentUsername;
-              const itemKey = p.id || `${participantName}-${index}`;
 
               return (
                 <span
-                  key={itemKey}
+                  key={p.id}
                   className={`text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 font-medium ${
                     isMe
                       ? "bg-primary/10 border-primary text-primary"
@@ -337,7 +341,6 @@ export default function VotingBoard() {
                     </span>
                   </div>
 
-                  {/* Acciones de Host para cambiar estatus */}
                   {isHost && (
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <Button

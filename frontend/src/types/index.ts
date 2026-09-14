@@ -81,7 +81,7 @@ export const FIBONACCI_CARDS = CARD_DECKS.FIBONACCI;
 
 // frontend/src/types/index.ts
 export interface Participant {
-  id: string;
+  id?: string | null;
   username?: string;
   displayName?: string;
   role?: "HOST" | "VOTER";
