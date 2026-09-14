@@ -15,7 +15,7 @@ export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
 
-  // 1. Obtener token unificado (Zustand con fallback a localStorage persistido)
+  // 1. Obtener token unificado
   const storeToken = useAuthStore((state) => state.token);
   const effectiveToken = useMemo(() => {
     return storeToken || localStorage.getItem("token");
@@ -31,8 +31,9 @@ export default function VotingBoard() {
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
 
-  // Estado de participantes
+  // Estado de participantes y control de inicialización de snapshot
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [hasReceivedSnapshot, setHasReceivedSnapshot] = useState(false);
 
   // Conexión STOMP con el token verificado
   const { connected: wsConnected, subscribe, publish } = useStompClient(effectiveToken);
@@ -55,6 +56,13 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
+  // Reset del snapshot si el socket cae
+  useEffect(() => {
+    if (!wsConnected) {
+      setHasReceivedSnapshot(false);
+    }
+  }, [wsConnected]);
+
   // Cargar sala y baraja inicial
   useEffect(() => {
     if (!code) return;
@@ -74,14 +82,13 @@ export default function VotingBoard() {
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername) return;
 
-    // 1. Suscribirse antes de emitir para capturar el snapshot inicial
-    const sub = subscribe(`/topic/session/${code}/participants`, (data: Participant[]) => {
+    const sub = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
       if (Array.isArray(data)) {
         setParticipants(data);
+        setHasReceivedSnapshot(true);
       }
     });
 
-    // 2. Armar payload diferenciando usuario registrado de invitado
     const joinPayload: Record<string, string> = {
       inviteCode: code,
     };
@@ -191,7 +198,10 @@ export default function VotingBoard() {
     }
   };
 
-  const totalParticipants = participants.length > 0 ? participants.length : (session?.participantCount ?? 1);
+  // Respetar snapshot vacío del WebSocket una vez inicializado
+  const totalParticipants = hasReceivedSnapshot 
+    ? participants.length 
+    : (session?.participantCount ?? 1);
 
   return (
     <main className="min-h-screen bg-background p-6 flex flex-col items-center justify-between">
@@ -259,7 +269,6 @@ export default function VotingBoard() {
         <div className="flex flex-wrap gap-2">
           {participants.length > 0 ? (
             participants.map((p) => {
-              // Soporte para ambos nombres de clave del DTO
               const participantKey = p.participantId ?? p.id ?? p.username;
               const participantName = p.effectiveName ?? p.username ?? p.displayName ?? "Participante";
               const isMe = participantName === currentUsername;
@@ -283,7 +292,7 @@ export default function VotingBoard() {
             })
           ) : (
             <span className="text-xs text-muted-foreground">
-              {currentUsername || "Conectando participantes..."}
+              {hasReceivedSnapshot ? "No hay participantes en la sala." : "Conectando participantes..."}
             </span>
           )}
         </div>

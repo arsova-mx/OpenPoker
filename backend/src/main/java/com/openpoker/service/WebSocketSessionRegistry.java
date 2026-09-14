@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Mapea cada sesión WebSocket (sessionId de STOMP) a los datos del usuario conectado,
- * para poder identificar quién se desconectó cuando se pierde la conexión.
+ * permitiendo rastrear múltiples sockets por participante.
  */
 @Component
 public class WebSocketSessionRegistry {
@@ -28,5 +28,17 @@ public class WebSocketSessionRegistry {
 
     public Optional<SessionInfo> get(String wsSessionId) {
         return Optional.ofNullable(sessions.get(wsSessionId));
+    }
+
+    /**
+     * Verifica si existen otras conexiones WebSocket activas para el mismo participante en la misma sala.
+     * Esto evita borrar el registro de Participant cuando se cierra una segunda pestaña o durante una reconexión rápida.
+     */
+    public boolean hasOtherConnectionsForParticipant(UUID participantId, String inviteCode) {
+        if (participantId == null || inviteCode == null) {
+            return false;
+        }
+        return sessions.values().stream()
+                .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
     }
 }

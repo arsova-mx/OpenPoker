@@ -8,15 +8,33 @@ function sanitizeStompLog(message: string): string {
   );
 }
 
+function getBrokerURL(): string {
+  // Si tienes definida una URL base de API en Vite (ej: VITE_API_BASE_URL="http://localhost:8080/api")
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+  
+  if (apiUrl) {
+    try {
+      const url = new URL(apiUrl, window.location.href);
+      const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${url.host}/ws-native`;
+    } catch {
+      // Si la URL relativa o malformada falla, continúa al fallback estándar
+    }
+  }
+
+  // Fallback por defecto usando el origen actual
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws-native`;
+}
+
 export function useStompClient(token?: string | null) {
   const clientRef = useRef<Client | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const brokerURL = `${protocol}//${window.location.host}/ws-native`;
-
+    const brokerURL = getBrokerURL();
     const headers: Record<string, string> = {};
+
     if (token) {
       headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
     }
@@ -35,11 +53,9 @@ export function useStompClient(token?: string | null) {
       onConnect: () => {
         setConnected(true);
       },
-      // Cierre ordenado por protocolo STOMP
       onDisconnect: () => {
         setConnected(false);
       },
-      // Caída inesperada del socket subyacente (cortes de red, timeouts)
       onWebSocketClose: () => {
         setConnected(false);
       },
@@ -60,15 +76,17 @@ export function useStompClient(token?: string | null) {
     };
   }, [token]);
 
+  // Se implementa genérico <T = unknown> para eliminar la advertencia de lint @typescript-eslint/no-explicit-any
   const subscribe = useCallback(
-    (destination: string, callback: (body: any) => void): StompSubscription | undefined => {
+    <T = unknown>(destination: string, callback: (body: T) => void): StompSubscription | undefined => {
       if (!clientRef.current || !clientRef.current.connected) return undefined;
 
       return clientRef.current.subscribe(destination, (msg: IMessage) => {
         try {
-          callback(JSON.parse(msg.body));
+          const parsed = JSON.parse(msg.body) as T;
+          callback(parsed);
         } catch {
-          callback(msg.body);
+          callback(msg.body as unknown as T);
         }
       });
     },
