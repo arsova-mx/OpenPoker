@@ -31,26 +31,18 @@ public class WebSocketDisconnectListener {
     public void handleDisconnect(SessionDisconnectEvent event) {
         String wsSessionId = event.getSessionId();
 
-        registry.unregister(wsSessionId).ifPresent(info -> {
-            log.info("WebSocket disconnected: participant={}, inviteCode={}, reason={}", 
+        // Ejecuta atómicamente la validación y solo llama a la limpieza si realmente era el último socket
+        registry.unregisterAndCleanupIfLast(wsSessionId, info -> {
+            log.info("WebSocket disconnected (última conexión): participant={}, inviteCode={}, reason={}", 
                     info.username(), info.inviteCode(), event.getCloseStatus());
 
             try {
                 UUID sessionId = info.sessionId();
 
-                // 1. Verificamos si aún existen otras pestañas o reconexiones activas para este participante
-                boolean hasOtherConnections = registry.hasOtherConnectionsForParticipant(info.participantId(), info.inviteCode());
-
-                if (hasOtherConnections) {
-                    log.info("El participante {} aún cuenta con otra conexión activa en la sala {}. No se elimina el registro.",
-                            info.username(), info.inviteCode());
-                    return;
-                }
-
-                // 2. Si era su única conexión, ejecutamos la desconexión (si era HOST, elimina la sesión)
+                // 1. Ejecutamos la desconexión física de la base de datos
                 gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
 
-                // 3. Notificamos el estado actualizado a los participantes restantes
+                // 2. Notificamos a los clientes restantes
                 try {
                     SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
 
@@ -72,7 +64,7 @@ public class WebSocketDisconnectListener {
                         voteService.getVoteStatus(sessionId, activeTicketId));
 
                 } catch (SessionNotFoundException ex) {
-                    // CASO HOST DESCONECTADO: Notificamos cierre de sesión a todos
+                    // CASO HOST DESCONECTADO: Sala eliminada
                     log.info("La sesión {} fue eliminada por desconexión del HOST. Notificando cierre...", info.inviteCode());
                     
                     messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", List.of());

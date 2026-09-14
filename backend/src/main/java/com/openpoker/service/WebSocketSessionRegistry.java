@@ -6,10 +6,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
- * Mapea cada sesión WebSocket (sessionId de STOMP) a los datos del usuario conectado,
- * permitiendo rastrear múltiples sockets por participante.
+ * Mapea cada sesión WebSocket a los datos del usuario conectado de forma atómica.
  */
 @Component
 public class WebSocketSessionRegistry {
@@ -17,13 +17,18 @@ public class WebSocketSessionRegistry {
     public record SessionInfo(UUID sessionId, UUID participantId, String username, String inviteCode) {}
 
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
+    private final Object lock = new Object();
 
     public void register(String wsSessionId, UUID sessionId, UUID participantId, String username, String inviteCode) {
-        sessions.put(wsSessionId, new SessionInfo(sessionId, participantId, username, inviteCode));
+        synchronized (lock) {
+            sessions.put(wsSessionId, new SessionInfo(sessionId, participantId, username, inviteCode));
+        }
     }
 
     public Optional<SessionInfo> unregister(String wsSessionId) {
-        return Optional.ofNullable(sessions.remove(wsSessionId));
+        synchronized (lock) {
+            return Optional.ofNullable(sessions.remove(wsSessionId));
+        }
     }
 
     public Optional<SessionInfo> get(String wsSessionId) {
@@ -31,14 +36,34 @@ public class WebSocketSessionRegistry {
     }
 
     /**
-     * Verifica si existen otras conexiones WebSocket activas para el mismo participante en la misma sala.
-     * Esto evita borrar el registro de Participant cuando se cierra una segunda pestaña o durante una reconexión rápida.
+     * Desregistra el socket y, de forma estrictamente atómica, ejecuta la limpieza
+     * únicamente si no existen otras conexiones activas para el mismo participante en esa sala.
+     *
+     * @param wsSessionId ID del socket cerrado
+     * @param cleanupAction Acción a ejecutar pasando el SessionInfo si ya no quedan sockets
      */
-    public boolean hasOtherConnectionsForParticipant(UUID participantId, String inviteCode) {
-        if (participantId == null || inviteCode == null) {
-            return false;
+    public void unregisterAndCleanupIfLast(String wsSessionId, Consumer<SessionInfo> cleanupAction) {
+        SessionInfo removedInfo;
+        boolean shouldCleanup = false;
+
+        synchronized (lock) {
+            removedInfo = sessions.remove(wsSessionId);
+            if (removedInfo != null) {
+                UUID participantId = removedInfo.participantId();
+                String inviteCode = removedInfo.inviteCode();
+
+                boolean hasOthers = sessions.values().stream()
+                        .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+                if (!hasOthers) {
+                    shouldCleanup = true;
+                }
+            }
         }
-        return sessions.values().stream()
-                .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+        // Si fue la última conexión y nadie se conectó en medio, se dispara la limpieza de base de datos
+        if (shouldCleanup && removedInfo != null) {
+            cleanupAction.accept(removedInfo);
+        }
     }
 }
