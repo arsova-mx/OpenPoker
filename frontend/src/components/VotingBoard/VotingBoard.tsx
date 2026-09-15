@@ -6,16 +6,24 @@ import { cardDeckService } from "@/api/services/cardDeckService";
 import { useVoting } from "@/hooks/useVoting";
 import { useStompClient } from "@/hooks/useStompClient";
 import useAuthStore from "@/store/authStore";
-import CardDeck from "../CardDeck/CardDeck";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { SessionResponse, CardValueResponse, Participant } from "@/types";
+import CardSelector from "../CardSelector/CardSelector";
+import VoteBoard from "../VoteBoard/VoteBoard";
+import RevealPanel from "../RevealPanel/RevealPanel";
+import type { 
+  SessionResponse, 
+  CardValueResponse, 
+  Participant, 
+  VoteStatusMap,
+  VotingRRAverageResponse 
+} from "@/types";
 
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
 
-  // 1. Obtener token unificado
+  // 1. Manejo seguro de Token y Username (Registrado vs Invitado)
   const storeToken = useAuthStore((state) => state.token);
   const effectiveToken = useMemo(() => {
     return storeToken || localStorage.getItem("token");
@@ -31,18 +39,21 @@ export default function VotingBoard() {
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
 
-  // Estado de participantes y control de inicialización de snapshot
+  // Estados reactivos WebSocket
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [hasReceivedSnapshot, setHasReceivedSnapshot] = useState(false);
+  const [voteStatusMap, setVoteStatusMap] = useState<VoteStatusMap>({});
+  const [sessionVotesData, setSessionVotesData] = useState<VotingRRAverageResponse | null>(null);
 
-  // Conexión STOMP con el token verificado
+  // Cliente STOMP
   const { connected: wsConnected, subscribe, publish } = useStompClient(effectiveToken);
 
-  // Formulario de ticket
+  // Formularios y Host
   const [newTitle, setNewTitle] = useState("");
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
+  // Hook de votación tradicional
   const {
     selectedCard,
     setSelectedCard,
@@ -56,14 +67,14 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
-  // Reset del snapshot si el socket cae
+  // Reset de snapshot en caso de reconexión
   useEffect(() => {
     if (!wsConnected) {
       setHasReceivedSnapshot(false);
     }
   }, [wsConnected]);
 
-  // Cargar sala y baraja inicial
+  // Cargar sesión y baraja inicial
   useEffect(() => {
     if (!code) return;
     sessionServices.getSession(code).then((data) => setSession(data));
@@ -78,17 +89,33 @@ export default function VotingBoard() {
       .catch(() => {});
   }, [code]);
 
-  // Ciclo STOMP: Suscribirse primero, publicar join después
+  // Suscripciones STOMP y Join a la sala
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername) return;
 
-    const sub = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
+    // 1. Suscripción a Participantes
+    const subParticipants = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
       if (Array.isArray(data)) {
         setParticipants(data);
         setHasReceivedSnapshot(true);
       }
     });
 
+    // 2. Suscripción a Estado de Votación (Checkmarks y esperas)
+    const subVoteStatus = subscribe<VoteStatusMap>(`/topic/session/${code}/vote-status`, (data) => {
+      if (data && typeof data === "object") {
+        setVoteStatusMap(data);
+      }
+    });
+
+    // 3. Suscripción a Resultados de Votación (Cartas reveladas y estadísticas)
+    const subVotes = subscribe<VotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
+      if (data && typeof data === "object") {
+        setSessionVotesData(data);
+      }
+    });
+
+    // 4. Emitir Join
     const joinPayload: Record<string, string> = {
       inviteCode: code,
     };
@@ -102,10 +129,19 @@ export default function VotingBoard() {
     publish("/app/session.join", joinPayload);
 
     return () => {
-      sub?.unsubscribe();
+      subParticipants?.unsubscribe();
+      subVoteStatus?.unsubscribe();
+      subVotes?.unsubscribe();
     };
   }, [wsConnected, code, currentUsername, isGuest, publish, subscribe]);
 
+  // Limpiar estados de votación cuando cambia el ticket activo
+  useEffect(() => {
+    setVoteStatusMap({});
+    setSessionVotesData(null);
+  }, [activeTicket?.id]);
+
+  // Carga de tickets
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -128,7 +164,7 @@ export default function VotingBoard() {
         return serverTicket;
       });
     } catch {
-      // Manejado por interceptor global
+      // Manejado por interceptor
     }
   }, [session?.id]);
 
@@ -136,6 +172,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
+  // Cambiar estado del ticket
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -198,13 +235,33 @@ export default function VotingBoard() {
     }
   };
 
-  // Respetar snapshot vacío del WebSocket una vez inicializado
+  // Botón Host: Resetear Votación / Nueva Ronda vía STOMP
+  const handleResetVotes = () => {
+    if (!wsConnected || !code || !activeTicket || !session) return;
+    
+    publish("/app/session.reset-votes", {
+      inviteCode: code,
+      username: currentUsername,
+      sessionId: session.id,
+      ticketId: activeTicket.id,
+    });
+    
+    setSelectedCard(null);
+    setVoteStatusMap({});
+    setSessionVotesData(null);
+  };
+
   const totalParticipants = hasReceivedSnapshot 
     ? participants.length 
     : (session?.participantCount ?? 1);
 
+  // Fusionamos los votos: si STOMP envió datos revelados usamos esos, sino el hook useVoting
+  const displayVotes = sessionVotesData?.votes ?? votes;
+  const isRevealed = revealed || Boolean(sessionVotesData?.revealed) || activeTicket?.status === "REVEALED";
+
   return (
     <main className="min-h-screen bg-background p-6 flex flex-col items-center justify-between">
+      {/* Header */}
       <header className="w-full max-w-4xl flex items-center justify-between border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
@@ -246,20 +303,34 @@ export default function VotingBoard() {
           <Button variant="outline" size="sm" onClick={() => navigate("/home")}>
             Volver al lobby
           </Button>
+          
+          {/* Botones de acción del Host */}
           {isHost && activeTicket && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={revealVotes}
-              disabled={votingLoading || revealed}
-            >
-              {revealed ? "Votos Revelados" : "Revelar votos"}
-            </Button>
+            <>
+              {!isRevealed ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={revealVotes}
+                  disabled={votingLoading}
+                >
+                  Revelar votos
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleResetVotes}
+                >
+                  Nueva ronda
+                </Button>
+              )}
+            </>
           )}
         </div>
       </header>
 
-      {/* Panel de participantes en tiempo real */}
+      {/* Participantes en vivo */}
       <section className="w-full max-w-4xl my-3 p-3 bg-card border border-border rounded-xl shadow-sm">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -412,7 +483,7 @@ export default function VotingBoard() {
         )}
       </section>
 
-      {/* Mesa central de votación */}
+      {/* Mesa central modular de votación */}
       {activeTicket ? (
         <>
           {votingError && (
@@ -431,61 +502,33 @@ export default function VotingBoard() {
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
 
-          <section className="w-full max-w-4xl my-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
-              Votos emitidos: {votes.length} de {totalParticipants}
-            </h3>
-            {votes.length === 0 ? (
-              <p className="text-center text-sm text-muted-foreground py-6">
-                Esperando a que los participantes emitan su voto...
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {votes.map((vote) => {
-                  const isCurrentUser = vote.username === currentUsername;
-                  return (
-                    <article
-                      key={vote.voteId}
-                      className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 shadow-sm
-                        ${isCurrentUser ? "border-primary/50 bg-primary/5" : "border-border bg-card"}
-                      `}
-                    >
-                      <span className="font-semibold text-sm truncate max-w-[120px]">
-                        {vote.username} {isCurrentUser && "(Tú)"}
-                      </span>
-                      <div className="h-14 w-10 rounded-md border border-border bg-muted flex items-center justify-center font-bold text-lg">
-                        {revealed ? <span>{vote.cardValue}</span> : <span className="text-primary">✓</span>}
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="w-full max-w-4xl flex flex-col items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-sm">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Elige tu carta
-            </h3>
-            <CardDeck
-              cards={deckCards}
-              selectedCardId={selectedCard}
-              onSelectCard={setSelectedCard}
-              disabled={votingLoading || revealed || activeTicket.status !== "VOTING"}
+          {/* Panel de estadísticas cuando la ronda se revela */}
+          {isRevealed && (
+            <RevealPanel
+              statistics={sessionVotesData?.statistics}
+              suggestedCardValue={sessionVotesData?.suggestedCardValue}
+              totalVotes={displayVotes.length}
             />
-            <Button
-              onClick={castVote}
-              disabled={!selectedCard || votingLoading || revealed || activeTicket.status !== "VOTING"}
-              size="lg"
-              className="w-full sm:w-64"
-            >
-              {activeTicket.status !== "VOTING"
-                ? `Ticket en estado ${activeTicket.status}`
-                : votingLoading
-                ? "Enviando..."
-                : "Enviar voto"}
-            </Button>
-          </section>
+          )}
+
+          {/* Tablero de participantes con cartas / checkmarks */}
+          <VoteBoard
+            participants={participants}
+            votes={displayVotes}
+            voteStatusMap={voteStatusMap}
+            revealed={isRevealed}
+            currentUsername={currentUsername}
+          />
+
+          {/* Selector de baraja interactivo */}
+          <CardSelector
+            cards={deckCards}
+            selectedCardId={selectedCard}
+            onSelectCard={setSelectedCard}
+            onSubmitVote={castVote}
+            disabled={votingLoading || isRevealed || activeTicket.status !== "VOTING"}
+            loading={votingLoading}
+          />
         </>
       ) : (
         <section className="text-center my-12 text-muted-foreground">

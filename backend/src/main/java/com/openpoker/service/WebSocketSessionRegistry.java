@@ -1,51 +1,97 @@
-@EventListener
-public void handleDisconnect(SessionDisconnectEvent event) {
-    String wsSessionId = event.getSessionId();
+package com.openpoker.service;
 
-    // Programa la limpieza tolerante a reconexiones rápidas
-    registry.scheduleCleanupIfLast(wsSessionId, info -> {
-        log.info("Ejecutando limpieza final de sesión: participant={}, inviteCode={}", 
-                info.username(), info.inviteCode());
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
-        try {
-            UUID sessionId = info.sessionId();
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
 
-            // 1. Borrado físico tras expirar el margen de gracia
-            gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
+/**
+ * Mapea cada sesión WebSocket a los datos del usuario conectado.
+ * Coordina la reconexión rápida mediante tareas de limpieza cancelables.
+ */
+@Slf4j
+@Component
+public class WebSocketSessionRegistry {
 
-            // 2. Notificación a los participantes restantes
-            try {
-                SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
+    public record SessionInfo(UUID sessionId, UUID participantId, String username, String inviteCode) {}
 
-                List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode())
-                    .stream()
-                    .map(p -> new WebSocketParticipantResponse(
-                            p.getId(),
-                            p.getEffectiveName(),
-                            p.getRole() != null ? p.getRole().name() : "",
-                            p.getUser() == null
-                    ))
-                    .toList();
+    private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
+    
+    // Tareas pendientes de limpieza por participante (clave: inviteCode + ":" + participantId)
+    private final Map<String, ScheduledFuture<?>> pendingCleanups = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final Object lock = new Object();
 
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", currentSession);
-                
-                UUID activeTicketId = null;
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/vote-status", 
-                    voteService.getVoteStatus(sessionId, activeTicketId));
+    // Tiempo de gracia en segundos para tolerar microcortes y reconexiones automáticas
+    private static final long GRACE_PERIOD_SECONDS = 10;
 
-            } catch (SessionNotFoundException ex) {
-                // Caso Host desconectado definitivamente
-                log.info("La sesión {} fue eliminada por desconexión del HOST tras expiración del grace period.", info.inviteCode());
-                
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", List.of());
-                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", 
-                    (Object) Map.of("status", "FINISHED", "message", "El Host ha cerrado la sesión"));
+    public void register(String wsSessionId, UUID sessionId, UUID participantId, String username, String inviteCode) {
+        synchronized (lock) {
+            String participantKey = inviteCode + ":" + participantId;
+            
+            // Si había una limpieza programada porque el socket anterior cayó, se cancela de inmediato
+            ScheduledFuture<?> pendingTask = pendingCleanups.remove(participantKey);
+            if (pendingTask != null) {
+                pendingTask.cancel(false);
+                log.info("Reconexión detectada para participantId={}. Tarea de limpieza cancelada.", participantId);
             }
 
-        } catch (Exception e) {
-            log.warn("Error cleaning up after disconnect: participantId={}, error={}",
-                    info.participantId(), e.getMessage());
+            sessions.put(wsSessionId, new SessionInfo(sessionId, participantId, username, inviteCode));
         }
-    });
+    }
+
+    public Optional<SessionInfo> unregister(String wsSessionId) {
+        synchronized (lock) {
+            return Optional.ofNullable(sessions.remove(wsSessionId));
+        }
+    }
+
+    public Optional<SessionInfo> get(String wsSessionId) {
+        return Optional.ofNullable(sessions.get(wsSessionId));
+    }
+
+    /**
+     * Programa la limpieza con margen de espera. Si el cliente vuelve a conectar en ese lapso,
+     * la tarea se aborta evitando borrar participantes o destruir salas activas.
+     */
+    public void scheduleCleanupIfLast(String wsSessionId, Consumer<SessionInfo> cleanupAction) {
+        synchronized (lock) {
+            SessionInfo removedInfo = sessions.remove(wsSessionId);
+            if (removedInfo == null) return;
+
+            UUID participantId = removedInfo.participantId();
+            String inviteCode = removedInfo.inviteCode();
+            String participantKey = inviteCode + ":" + participantId;
+
+            // Verificamos si aún tiene otros sockets (otra pestaña abierta)
+            boolean hasOthers = sessions.values().stream()
+                    .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+            if (hasOthers) {
+                log.info("El participante {} aún tiene otras pestañas abiertas. No se programa limpieza.", removedInfo.username());
+                return;
+            }
+
+            log.info("Último socket cerrado para {}. Programando limpieza en {}s...", removedInfo.username(), GRACE_PERIOD_SECONDS);
+
+            ScheduledFuture<?> task = scheduler.schedule(() -> {
+                synchronized (lock) {
+                    pendingCleanups.remove(participantKey);
+                    // Verificación final bajo lock antes de ejecutar la acción destructiva
+                    boolean reconnected = sessions.values().stream()
+                            .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+                    if (!reconnected) {
+                        cleanupAction.accept(removedInfo);
+                    }
+                }
+            }, GRACE_PERIOD_SECONDS, TimeUnit.SECONDS);
+
+            pendingCleanups.put(participantKey, task);
+        }
+    }
 }
