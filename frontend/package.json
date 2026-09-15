@@ -17,6 +17,7 @@
     "@fontsource-variable/roboto": "^5.2.10",
     "@hookform/resolvers": "^5.2.2",
     "@remixicon/react": "^4.9.0",
+    "@stomp/stompjs": "^7.3.0",
     "@tailwindcss/vite": "^4.2.4",
     "axios": "^1.15.2",
     "class-variance-authority": "^0.7.1",

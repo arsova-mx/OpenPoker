@@ -31,17 +31,18 @@ public class WebSocketDisconnectListener {
     public void handleDisconnect(SessionDisconnectEvent event) {
         String wsSessionId = event.getSessionId();
 
-        registry.unregister(wsSessionId).ifPresent(info -> {
-            log.info("WebSocket disconnected: participant={}, inviteCode={}, reason={}", 
+        // Ejecuta atómicamente la validación y solo llama a la limpieza si realmente era el último socket
+        registry.unregisterAndCleanupIfLast(wsSessionId, info -> {
+            log.info("WebSocket disconnected (última conexión): participant={}, inviteCode={}, reason={}", 
                     info.username(), info.inviteCode(), event.getCloseStatus());
 
             try {
                 UUID sessionId = info.sessionId();
 
-                // 1. Ejecutamos la desconexión (si era HOST, elimina la sesión)
+                // 1. Ejecutamos la desconexión física de la base de datos
                 gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
 
-                // 2. Intentamos notificar el nuevo estado a los participantes restantes
+                // 2. Notificamos a los clientes restantes
                 try {
                     SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
 
@@ -63,11 +64,12 @@ public class WebSocketDisconnectListener {
                         voteService.getVoteStatus(sessionId, activeTicketId));
 
                 } catch (SessionNotFoundException ex) {
-                    // 🚀 CASO HOST DESCONECTADO: Si la sesión fue eliminada, notificamos a todos los clientes que la sala se cerró
+                    // CASO HOST DESCONECTADO: Sala eliminada
                     log.info("La sesión {} fue eliminada por desconexión del HOST. Notificando cierre...", info.inviteCode());
                     
                     messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", List.of());
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", (Object) Map.of("status", "FINISHED", "message", "El Host ha cerrado la sesión")); // 👈 Casteo explícito a (Object));
+                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", 
+                        (Object) Map.of("status", "FINISHED", "message", "El Host ha cerrado la sesión"));
                 }
 
             } catch (Exception e) {

@@ -1,32 +1,48 @@
-import { useState, useEffect, useCallback, type FormEvent, type MouseEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type FormEvent, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { sessionServices } from "@/api/services/sessionServices";
 import { ticketService, type TicketResponse, type TicketStatus } from "@/api/services/ticketService";
 import { cardDeckService } from "@/api/services/cardDeckService";
 import { useVoting } from "@/hooks/useVoting";
+import { useStompClient } from "@/hooks/useStompClient";
 import useAuthStore from "@/store/authStore";
 import CardDeck from "../CardDeck/CardDeck";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { SessionResponse, CardValueResponse } from "@/types";
+import type { SessionResponse, CardValueResponse, Participant } from "@/types";
 
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const currentUsername = useAuthStore((state) => state.username);
 
-  // Estados de sesión, baraja y tickets tipados estrictamente
+  // 1. Obtener token unificado
+  const storeToken = useAuthStore((state) => state.token);
+  const effectiveToken = useMemo(() => {
+    return storeToken || localStorage.getItem("token");
+  }, [storeToken]);
+
+  const rawUsername = useAuthStore((state) => state.username);
+  const currentUsername = rawUsername || localStorage.getItem("username") || "Participante";
+  const isGuest = !effectiveToken;
+
+  // Estados de sesión, baraja y tickets
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [deckCards, setDeckCards] = useState<CardValueResponse[]>([]);
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
 
-  // Estado para crear nuevo ticket y toggle del formulario
+  // Estado de participantes y control de inicialización de snapshot
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [hasReceivedSnapshot, setHasReceivedSnapshot] = useState(false);
+
+  // Conexión STOMP con el token verificado
+  const { connected: wsConnected, subscribe, publish } = useStompClient(effectiveToken);
+
+  // Formulario de ticket
   const [newTitle, setNewTitle] = useState("");
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Hook de votación enlazado al ticket activo
   const {
     selectedCard,
     setSelectedCard,
@@ -40,7 +56,14 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
-  // 1. Cargar detalles de sesión y baraja
+  // Reset del snapshot si el socket cae
+  useEffect(() => {
+    if (!wsConnected) {
+      setHasReceivedSnapshot(false);
+    }
+  }, [wsConnected]);
+
+  // Cargar sala y baraja inicial
   useEffect(() => {
     if (!code) return;
     sessionServices.getSession(code).then((data) => setSession(data));
@@ -55,7 +78,34 @@ export default function VotingBoard() {
       .catch(() => {});
   }, [code]);
 
-  // 2. Cargar tickets de la sala directamente tipados y normalizados
+  // Ciclo STOMP: Suscribirse primero, publicar join después
+  useEffect(() => {
+    if (!wsConnected || !code || !currentUsername) return;
+
+    const sub = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
+      if (Array.isArray(data)) {
+        setParticipants(data);
+        setHasReceivedSnapshot(true);
+      }
+    });
+
+    const joinPayload: Record<string, string> = {
+      inviteCode: code,
+    };
+
+    if (isGuest) {
+      joinPayload.guestName = currentUsername;
+    } else {
+      joinPayload.username = currentUsername;
+    }
+
+    publish("/app/session.join", joinPayload);
+
+    return () => {
+      sub?.unsubscribe();
+    };
+  }, [wsConnected, code, currentUsername, isGuest, publish, subscribe]);
+
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -71,7 +121,6 @@ export default function VotingBoard() {
         const serverTicket = data.find((t) => t.id === prev.id);
         if (!serverTicket) return prev;
 
-        // Si en local lo acabas de activar a VOTING, no permitir que un snapshot viejo lo degrade
         if (prev.status === "VOTING" && serverTicket.status === "WAITING") {
           return { ...serverTicket, status: "VOTING" };
         }
@@ -87,7 +136,6 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // 3. Cambiar estado de cualquier ticket y actualizar UI inmediatamente
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -119,13 +167,11 @@ export default function VotingBoard() {
     }
   };
 
-  // 4. Seleccionar un ticket para ver sus detalles en mesa
   const handleSelectTicket = (ticket: TicketResponse) => {
     setActiveTicket(ticket);
     setShowCreateForm(false);
   };
 
-  // 5. Crear ticket nuevo
   const handleCreateTicket = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !session?.id) return;
@@ -152,21 +198,39 @@ export default function VotingBoard() {
     }
   };
 
+  // Respetar snapshot vacío del WebSocket una vez inicializado
+  const totalParticipants = hasReceivedSnapshot 
+    ? participants.length 
+    : (session?.participantCount ?? 1);
+
   return (
     <main className="min-h-screen bg-background p-6 flex flex-col items-center justify-between">
-      {/* Cabecera */}
       <header className="w-full max-w-4xl flex items-center justify-between border-b border-border pb-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             {session?.name || "Mesa de Votación"}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Código: <span className="font-mono font-bold text-primary">{code}</span>
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            <span>
+              Código: <strong className="font-mono text-primary">{code}</strong>
+            </span>
             {isHost && (
-              <span className="ml-2 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
+              <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
                 Host
               </span>
             )}
+            <span
+              role="status"
+              aria-label={wsConnected ? "WebSocket conectado" : "WebSocket desconectado"}
+              className={`inline-block h-2 w-2 rounded-full ${
+                wsConnected ? "bg-green-500" : "bg-red-500"
+              }`}
+              title={wsConnected ? "WebSocket Conectado" : "Desconectado"}
+            >
+              <span className="sr-only">
+                {wsConnected ? "WebSocket conectado" : "WebSocket desconectado"}
+              </span>
+            </span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -195,7 +259,46 @@ export default function VotingBoard() {
         </div>
       </header>
 
-      {/* Formulario desplegable para crear más tickets */}
+      {/* Panel de participantes en tiempo real */}
+      <section className="w-full max-w-4xl my-3 p-3 bg-card border border-border rounded-xl shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Conectados en vivo ({totalParticipants})
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {participants.length > 0 ? (
+            participants.map((p) => {
+              const participantKey = p.participantId ?? p.id ?? p.username;
+              const participantName = p.effectiveName ?? p.username ?? p.displayName ?? "Participante";
+              const isMe = participantName === currentUsername;
+
+              return (
+                <span
+                  key={participantKey}
+                  className={`text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 font-medium ${
+                    isMe
+                      ? "bg-primary/10 border-primary text-primary"
+                      : "bg-muted text-muted-foreground border-border"
+                  }`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                  {participantName} {isMe && "(Tú)"}
+                  {p.role === "HOST" && (
+                    <span className="text-[10px] uppercase font-bold text-amber-500">★</span>
+                  )}
+                </span>
+              );
+            })
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {hasReceivedSnapshot ? "No hay participantes en la sala." : "Conectando participantes..."}
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* Formulario de tickets */}
       {showCreateForm && isHost && (
         <section className="w-full max-w-4xl my-4 p-4 bg-muted/40 border border-border rounded-xl">
           <h2 className="text-sm font-semibold mb-2">Crear nuevo ticket en esta sala</h2>
@@ -214,7 +317,7 @@ export default function VotingBoard() {
         </section>
       )}
 
-      {/* Backlog de tickets con controles de estado */}
+      {/* Backlog */}
       <section className="w-full max-w-4xl my-4 bg-card p-4 rounded-xl border border-border shadow-sm">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -257,7 +360,6 @@ export default function VotingBoard() {
                     </span>
                   </div>
 
-                  {/* Acciones de Host para cambiar estatus */}
                   {isHost && (
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <Button
@@ -329,10 +431,9 @@ export default function VotingBoard() {
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
 
-          {/* Participantes */}
           <section className="w-full max-w-4xl my-4">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
-              Participantes en la sala: {session?.participantCount ?? 1} (Votos: {votes.length})
+              Votos emitidos: {votes.length} de {totalParticipants}
             </h3>
             {votes.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-6">
@@ -362,7 +463,6 @@ export default function VotingBoard() {
             )}
           </section>
 
-          {/* Baraja */}
           <section className="w-full max-w-4xl flex flex-col items-center gap-4 bg-card p-6 rounded-2xl border border-border shadow-sm">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
               Elige tu carta

@@ -78,3 +78,14 @@ export const CARD_DECKS: Record<CardDeckType, string[]> = {
 
 // Por compatibilidad con el checklist para el MVP
 export const FIBONACCI_CARDS = CARD_DECKS.FIBONACCI;
+
+// frontend/src/types/index.ts
+export interface Participant {
+  id?: string;
+  participantId?: string;
+  username?: string;
+  displayName?: string;
+  effectiveName?: string;
+  role?: "HOST" | "VOTER";
+  isGuest?: boolean;
+}
