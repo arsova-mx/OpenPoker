@@ -23,7 +23,7 @@ export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
 
-  // 1. Manejo seguro de Token y Username (Registrado vs Invitado)
+  // 1. Manejo seguro de Token y Username
   const storeToken = useAuthStore((state) => state.token);
   const effectiveToken = useMemo(() => {
     return storeToken || localStorage.getItem("token");
@@ -53,7 +53,7 @@ export default function VotingBoard() {
   const [isCreatingTicket, setIsCreatingTicket] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Hook de votación tradicional
+  // Hook de votación
   const {
     selectedCard,
     setSelectedCard,
@@ -101,21 +101,41 @@ export default function VotingBoard() {
       }
     });
 
-    // 2. Suscripción a Estado de Votación (Checkmarks y esperas)
+    // 2. Suscripción a Estado de Votación (Checks y esperas)
     const subVoteStatus = subscribe<VoteStatusMap>(`/topic/session/${code}/vote-status`, (data) => {
       if (data && typeof data === "object") {
         setVoteStatusMap(data);
       }
     });
 
-    // 3. Suscripción a Resultados de Votación (Cartas reveladas y estadísticas)
+    // 3. Suscripción a Resultados de Votación
     const subVotes = subscribe<VotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
         setSessionVotesData(data);
       }
     });
 
-    // 4. Emitir Join
+    // 4. Suscripción a Tickets en tiempo real
+    const subTicketUpdated = subscribe<TicketResponse>(
+      `/topic/session/${code}/ticket-updated`,
+      (updatedTicket) => {
+        if (updatedTicket && updatedTicket.id) {
+          setTickets((prev) => {
+            const exists = prev.some((t) => t.id === updatedTicket.id);
+            if (exists) {
+              return prev.map((t) => (t.id === updatedTicket.id ? updatedTicket : t));
+            }
+            return [updatedTicket, ...prev];
+          });
+
+          if (updatedTicket.status === "VOTING" || updatedTicket.status === "REVEALED") {
+            setActiveTicket(updatedTicket);
+          }
+        }
+      }
+    );
+
+    // 5. Emitir Join
     const joinPayload: Record<string, string> = {
       inviteCode: code,
     };
@@ -132,6 +152,7 @@ export default function VotingBoard() {
       subParticipants?.unsubscribe();
       subVoteStatus?.unsubscribe();
       subVotes?.unsubscribe();
+      subTicketUpdated?.unsubscribe();
     };
   }, [wsConnected, code, currentUsername, isGuest, publish, subscribe]);
 
@@ -141,7 +162,7 @@ export default function VotingBoard() {
     setSessionVotesData(null);
   }, [activeTicket?.id]);
 
-  // Carga de tickets
+  // Carga de tickets inicial
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -180,7 +201,7 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
-      await ticketService.updateStatus(ticketId, newStatus);
+      const updated = await ticketService.updateStatus(ticketId, newStatus);
 
       setActiveTicket((prev) => {
         if (!prev || prev.id === ticketId) {
@@ -197,6 +218,13 @@ export default function VotingBoard() {
       setTickets((prev) =>
         prev.map((t) => (t.id === ticketId ? { ...t, status: newStatus } : t))
       );
+
+      if (wsConnected && code) {
+        publish("/app/session.ticket-update", {
+          inviteCode: code,
+          ticket: updated || { id: ticketId, status: newStatus },
+        });
+      }
 
       await loadTickets();
     } catch (err) {
@@ -222,10 +250,20 @@ export default function VotingBoard() {
 
       await ticketService.updateStatus(created.id, "VOTING");
 
-      setActiveTicket({
+      const activeCreated = {
         ...created,
-        status: "VOTING",
-      });
+        status: "VOTING" as TicketStatus,
+      };
+
+      setActiveTicket(activeCreated);
+      setTickets((prev) => [activeCreated, ...prev]);
+
+      if (wsConnected && code) {
+        publish("/app/session.ticket-update", {
+          inviteCode: code,
+          ticket: activeCreated,
+        });
+      }
 
       setNewTitle("");
       setShowCreateForm(false);
@@ -235,7 +273,51 @@ export default function VotingBoard() {
     }
   };
 
-  // Botón Host: Resetear Votación / Nueva Ronda vía STOMP
+  // Voto unificado (HTTP + WebSocket + Actualización visual inmediata)
+  const handleSubmitVote = async () => {
+    if (!selectedCard || !code || !activeTicket) return;
+
+    // 1. Ejecución HTTP (persiste voto en backend)
+    await castVote();
+
+    // 2. Notificación WebSocket para refrescar /vote-status a los demás participantes
+    if (wsConnected) {
+      publish("/app/session.vote", {
+        inviteCode: code,
+        ticketId: activeTicket.id,
+        cardValue: selectedCard,
+        username: currentUsername,
+      });
+    }
+
+    // 3. Marcado optimista local para que cambie a verde de inmediato
+    const me = participants.find(
+      (p) => (p.effectiveName || p.username || p.displayName) === currentUsername
+    );
+    const myId = me?.id || me?.participantId || currentUsername;
+    setVoteStatusMap((prev) => ({
+      ...prev,
+      [myId]: true,
+      [currentUsername]: true,
+    }));
+  };
+
+  // Revelar votos vía STOMP
+  const handleRevealVotesWS = () => {
+    if (!wsConnected || !code || !activeTicket) {
+      revealVotes();
+      return;
+    }
+
+    publish("/app/session.reveal", {
+      inviteCode: code,
+      ticketId: activeTicket.id,
+    });
+    
+    revealVotes();
+  };
+
+  // Resetear Votación / Nueva Ronda vía STOMP
   const handleResetVotes = () => {
     if (!wsConnected || !code || !activeTicket || !session) return;
     
@@ -255,7 +337,6 @@ export default function VotingBoard() {
     ? participants.length 
     : (session?.participantCount ?? 1);
 
-  // Fusionamos los votos: si STOMP envió datos revelados usamos esos, sino el hook useVoting
   const displayVotes = sessionVotesData?.votes ?? votes;
   const isRevealed = revealed || Boolean(sessionVotesData?.revealed) || activeTicket?.status === "REVEALED";
 
@@ -311,7 +392,7 @@ export default function VotingBoard() {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={revealVotes}
+                  onClick={handleRevealVotesWS}
                   disabled={votingLoading}
                 >
                   Revelar votos
@@ -483,7 +564,7 @@ export default function VotingBoard() {
         )}
       </section>
 
-      {/* Mesa central modular de votación */}
+      {/* Mesa central modular */}
       {activeTicket ? (
         <>
           {votingError && (
@@ -525,7 +606,7 @@ export default function VotingBoard() {
             cards={deckCards}
             selectedCardId={selectedCard}
             onSelectCard={setSelectedCard}
-            onSubmitVote={castVote}
+            onSubmitVote={handleSubmitVote}
             disabled={votingLoading || isRevealed || activeTicket.status !== "VOTING"}
             loading={votingLoading}
           />

@@ -16,7 +16,7 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
   revealed,
   currentUsername,
 }) => {
-  // Mapa auxiliar para buscar el voto revelado por participante o username
+  // Indexación por username para búsqueda O(1) de votos revelados
   const votesByUsername = new Map<string, VoteResponse>(
     votes.map((v) => [v.username, v])
   );
@@ -34,17 +34,25 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
           {participants.map((participant) => {
-            const pId = participant.id || participant.participantId || "";
+            const pId = participant.id || "";
+            const altId = participant.participantId || "";
             const name = participant.effectiveName || participant.displayName || participant.username || "Anónimo";
             const isCurrentUser = name === currentUsername;
-            
-            // Saber si ya votó: consultamos el status map o si ya existe en la lista de votos
-            const hasVoted = Boolean(voteStatusMap[pId] || votesByUsername.has(name));
+
+            // Validación exhaustiva contra IDs, alias y registro local
+            const hasVoted = Boolean(
+              (pId && voteStatusMap[pId]) ||
+              (altId && voteStatusMap[altId]) ||
+              (name && voteStatusMap[name]) ||
+              votesByUsername.has(name) ||
+              (isCurrentUser && voteStatusMap[currentUsername])
+            );
+
             const voteData = votesByUsername.get(name);
 
             return (
               <article
-                key={pId || name}
+                key={pId || altId || name}
                 className={`p-4 rounded-xl border flex flex-col items-center justify-center gap-2 shadow-sm transition-colors ${
                   isCurrentUser ? "border-primary/50 bg-primary/5" : "border-border bg-card"
                 }`}
@@ -57,9 +65,13 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
                   {revealed ? (
                     <span>{voteData ? voteData.cardValue : "—"}</span>
                   ) : hasVoted ? (
-                    <span className="text-green-600 dark:text-green-400" title="Voto emitido">✅</span>
+                    <span className="text-green-600 dark:text-green-400" title="Voto emitido">
+                      ✅
+                    </span>
                   ) : (
-                    <span className="text-muted-foreground" title="Pensando...">⏳</span>
+                    <span className="text-muted-foreground" title="Pensando...">
+                      ⏳
+                    </span>
                   )}
                 </div>
               </article>

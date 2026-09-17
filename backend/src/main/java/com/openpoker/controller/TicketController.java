@@ -17,14 +17,13 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.UUID;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-
 
 @RestController
 @RequestMapping("/api/tickets")
@@ -34,6 +33,7 @@ public class TicketController {
     private final TicketRepository ticketRepository;
     private final GameSessionRepository sessionRepository;
     private final TicketService ticketService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping
     public TicketResponseDTO createTicket(@RequestBody CreateTicketDTO dto) {
@@ -42,20 +42,28 @@ public class TicketController {
 
         Ticket ticket = Ticket.builder()
                 .id(UUID.randomUUID())
-                .tittle(dto.getTitle()) // Cambiado a 'title' si corregiste el typo de 'tittle'
+                .tittle(dto.getTitle())
                 .description(dto.getDescription())
                 .gameSession(session)
                 .build();
         
         Ticket savedTicket = ticketRepository.save(ticket);
 
-        return new TicketResponseDTO(
+        TicketResponseDTO response = new TicketResponseDTO(
             savedTicket.getId(),
             savedTicket.getTittle(),
             savedTicket.getDescription(),
             savedTicket.getGameSession().getId(),
             savedTicket.getStatus()
         );
+
+        // 🚀 Notificar en vivo a toda la sala que se creó un ticket
+        messagingTemplate.convertAndSend(
+            "/topic/session/" + session.getSessionCode() + "/ticket-updated",
+            response
+        );
+
+        return response;
     }
 
     // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala
@@ -63,22 +71,20 @@ public class TicketController {
     public ResponseEntity<List<TicketResponseDTO>> getTicketsBySession(@PathVariable UUID sessionId) {
         List<Ticket> tickets = ticketRepository.findByGameSessionId(sessionId);
 
-        // 2. Mapeamos de forma limpia a la lista de DTOs seguros
         List<TicketResponseDTO> response = tickets.stream()
                 .map(t -> new TicketResponseDTO(
                     t.getId(),
-                    t.getTittle(),       // Mantén el typo 'getTittle()' si aún está así en tu entidad original
+                    t.getTittle(),
                     t.getDescription(),
                     t.getGameSession().getId(),
                     t.getStatus()
                 ))
                 .toList();
 
-        // 3. Retornamos la lista sanitizada y libre de ciclos JSON
         return ResponseEntity.ok(response);
     }
 
-    // Pequeño DTO interno rápido para mapear el JSON de Postman
+    // DTO interno para el request body de creación
     @lombok.Data
     public static class CreateTicketDTO {
         private String title;
@@ -91,10 +97,17 @@ public class TicketController {
             @PathVariable UUID ticketId, 
             @RequestParam TicketStatus newStatus) {
         
-        // Delegamos la lógica al servicio
         TicketResponseDTO response = ticketService.updateStatus(ticketId, newStatus);
+
+        // 🚀 Notificar en vivo el cambio de estado (ej: al pasar a VOTING)
+        ticketRepository.findById(ticketId).ifPresent(ticket -> {
+            String inviteCode = ticket.getGameSession().getSessionCode();
+            messagingTemplate.convertAndSend(
+                "/topic/session/" + inviteCode + "/ticket-updated",
+                response
+            );
+        });
         
         return ResponseEntity.ok(response);
     }
-
 }
