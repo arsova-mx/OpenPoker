@@ -3,9 +3,9 @@ package com.openpoker.controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import com.openpoker.dto.TicketResponseDTO;
-import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Ticket;
 import com.openpoker.entity.TicketStatus;
 import com.openpoker.repository.GameSessionRepository;
@@ -36,34 +36,22 @@ public class TicketController {
     private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping
-    public TicketResponseDTO createTicket(@RequestBody CreateTicketDTO dto) {
-        GameSession session = sessionRepository.findById(dto.getGameSessionId())
-                .orElseThrow(() -> new IllegalArgumentException("Sesión no encontrada"));
+    public ResponseEntity<TicketResponseDTO> createTicket(
+            @AuthenticationPrincipal String username,
+            @RequestBody CreateTicketDTO dto) {
 
-        Ticket ticket = Ticket.builder()
-                .id(UUID.randomUUID())
-                .tittle(dto.getTitle())
-                .description(dto.getDescription())
-                .gameSession(session)
-                .build();
-        
-        Ticket savedTicket = ticketRepository.save(ticket);
+        // 🔒 Delegamos la creación y la verificación del rol HOST al servicio
+        TicketResponseDTO response = ticketService.createTicket(username, dto);
 
-        TicketResponseDTO response = new TicketResponseDTO(
-            savedTicket.getId(),
-            savedTicket.getTittle(),
-            savedTicket.getDescription(),
-            savedTicket.getGameSession().getId(),
-            savedTicket.getStatus()
-        );
+        // Notificar en vivo a toda la sala que se creó un ticket
+        sessionRepository.findById(dto.getGameSessionId()).ifPresent(session -> {
+            messagingTemplate.convertAndSend(
+                "/topic/session/" + session.getSessionCode() + "/ticket-updated",
+                response
+            );
+        });
 
-        // 🚀 Notificar en vivo a toda la sala que se creó un ticket
-        messagingTemplate.convertAndSend(
-            "/topic/session/" + session.getSessionCode() + "/ticket-updated",
-            response
-        );
-
-        return response;
+        return ResponseEntity.ok(response);
     }
 
     // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala
@@ -84,7 +72,6 @@ public class TicketController {
         return ResponseEntity.ok(response);
     }
 
-    // DTO interno para el request body de creación
     @lombok.Data
     public static class CreateTicketDTO {
         private String title;
@@ -94,10 +81,12 @@ public class TicketController {
 
     @PatchMapping("/{ticketId}/status")
     public ResponseEntity<TicketResponseDTO> updateTicketStatus(
+            @AuthenticationPrincipal String username,
             @PathVariable UUID ticketId, 
             @RequestParam TicketStatus newStatus) {
-        
-        TicketResponseDTO response = ticketService.updateStatus(ticketId, newStatus);
+
+        // 🔒 Delegamos la actualización y validación de HOST al servicio
+        TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus);
 
         // 🚀 Notificar en vivo el cambio de estado (ej: al pasar a VOTING)
         ticketRepository.findById(ticketId).ifPresent(ticket -> {
@@ -107,7 +96,7 @@ public class TicketController {
                 response
             );
         });
-        
+
         return ResponseEntity.ok(response);
     }
 }

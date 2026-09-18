@@ -22,7 +22,7 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
   );
 
   return (
-    <section className="w-full max-w-4xl my-4">
+    <section className="w-full max-w-4xl my-4" aria-label="Tablero de votación de participantes">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4 text-center">
         Participantes ({participants.length})
       </h3>
@@ -36,7 +36,11 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
           {participants.map((participant) => {
             const pId = participant.id || "";
             const altId = participant.participantId || "";
-            const name = participant.effectiveName || participant.displayName || participant.username || "Anónimo";
+            const name =
+              participant.effectiveName ||
+              participant.displayName ||
+              participant.username ||
+              "Anónimo";
             const isCurrentUser = name === currentUsername;
 
             // Validación exhaustiva contra IDs, alias y registro local
@@ -50,6 +54,15 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
 
             const voteData = votesByUsername.get(name);
 
+            // Texto descriptivo accesible para lectores de pantalla
+            const accessibleStatusText = revealed
+              ? voteData
+                ? `Votó ${voteData.cardValue}`
+                : "Sin voto registrado"
+              : hasVoted
+              ? `${name} ya emitió su voto`
+              : `${name} está pensando su voto`;
+
             return (
               <article
                 key={pId || altId || name}
@@ -61,15 +74,24 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
                   {name} {isCurrentUser && "(Tú)"}
                 </span>
 
-                <div className="h-14 w-10 rounded-md border border-border bg-muted flex items-center justify-center font-bold text-lg">
+                {/* Región viva que anuncia el cambio de estado de manera no intrusiva */}
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="h-14 w-10 rounded-md border border-border bg-muted flex items-center justify-center font-bold text-lg relative"
+                >
+                  {/* Texto explícito oculto visualmente, exclusivo para tecnologías de asistencia */}
+                  <span className="sr-only">{accessibleStatusText}</span>
+
+                  {/* Representación visual decorativa ignorada por el lector de pantalla */}
                   {revealed ? (
-                    <span>{voteData ? voteData.cardValue : "—"}</span>
+                    <span aria-hidden="true">{voteData ? voteData.cardValue : "—"}</span>
                   ) : hasVoted ? (
-                    <span className="text-green-600 dark:text-green-400" title="Voto emitido">
+                    <span aria-hidden="true" className="text-green-600 dark:text-green-400">
                       ✅
                     </span>
                   ) : (
-                    <span className="text-muted-foreground" title="Pensando...">
+                    <span aria-hidden="true" className="text-muted-foreground">
                       ⏳
                     </span>
                   )}

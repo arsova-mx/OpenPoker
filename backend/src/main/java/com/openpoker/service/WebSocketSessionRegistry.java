@@ -7,11 +7,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
  * Mapea cada sesión WebSocket a los datos del usuario conectado.
- * Coordina la reconexión rápida mediante tareas de limpieza cancelables.
+ * Coordina la reconexión rápida mediante generaciones atómicas sin bloquear
+ * el registro ante limpiezas lentas de base de datos.
  */
 @Slf4j
 @Component
@@ -19,25 +21,51 @@ public class WebSocketSessionRegistry {
 
     public record SessionInfo(UUID sessionId, UUID participantId, String username, String inviteCode) {}
 
+    // Registro de sockets activos
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
     
-    // Tareas pendientes de limpieza por participante (clave: inviteCode + ":" + participantId)
+    // Tareas pendientes por participante
     private final Map<String, ScheduledFuture<?>> pendingCleanups = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    // Generador de versión por participante para invalidar limpiezas obsoletas sin lock
+    private final Map<String, AtomicLong> participantGenerations = new ConcurrentHashMap<>();
+
+    // Pool para tareas programadas (evita que un solo hilo bloquee la cola)
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(
+            Math.max(2, Runtime.getRuntime().availableProcessors()),
+            r -> {
+                Thread t = new Thread(r, "ws-session-cleanup");
+                t.setDaemon(true);
+                return t;
+            }
+    );
+
+    // Executor dedicado para ejecutar el I/O pesado (DB y WebSocket broadcast) fuera del monitor
+    private final ExecutorService cleanupExecutor = Executors.newCachedThreadPool(
+            r -> {
+                Thread t = new Thread(r, "ws-cleanup-worker");
+                t.setDaemon(true);
+                return t;
+            }
+    );
+
     private final Object lock = new Object();
 
-    // Tiempo de gracia en segundos para tolerar microcortes y reconexiones automáticas
+    // Tiempo de gracia para reconexiones automáticas
     private static final long GRACE_PERIOD_SECONDS = 10;
 
     public void register(String wsSessionId, UUID sessionId, UUID participantId, String username, String inviteCode) {
+        String participantKey = inviteCode + ":" + participantId;
+
         synchronized (lock) {
-            String participantKey = inviteCode + ":" + participantId;
-            
-            // Si había una limpieza programada porque el socket anterior cayó, se cancela de inmediato
+            // 1. Invalidamos cualquier generación anterior
+            participantGenerations.computeIfAbsent(participantKey, k -> new AtomicLong(0)).incrementAndGet();
+
+            // 2. Si había una limpieza programada, se aborta de inmediato
             ScheduledFuture<?> pendingTask = pendingCleanups.remove(participantKey);
             if (pendingTask != null) {
                 pendingTask.cancel(false);
-                log.info("Reconexión detectada para participantId={}. Tarea de limpieza cancelada.", participantId);
+                log.info("Reconexión detectada para participantId={}. Tarea de limpieza abortada.", participantId);
             }
 
             sessions.put(wsSessionId, new SessionInfo(sessionId, participantId, username, inviteCode));
@@ -55,39 +83,72 @@ public class WebSocketSessionRegistry {
     }
 
     /**
-     * Programa la limpieza con margen de espera. Si el cliente vuelve a conectar en ese lapso,
-     * la tarea se aborta evitando borrar participantes o destruir salas activas.
+     * Programa la limpieza con margen de espera. La decisión y el estado se toman bajo lock,
+     * pero la ejecución destructiva pesada (DB / STOMP) corre fuera del monitor.
      */
     public void scheduleCleanupIfLast(String wsSessionId, Consumer<SessionInfo> cleanupAction) {
+        SessionInfo removedInfo;
+        String participantKey;
+        long expectedGeneration;
+
         synchronized (lock) {
-            SessionInfo removedInfo = sessions.remove(wsSessionId);
+            removedInfo = sessions.remove(wsSessionId);
             if (removedInfo == null) return;
 
             UUID participantId = removedInfo.participantId();
             String inviteCode = removedInfo.inviteCode();
-            String participantKey = inviteCode + ":" + participantId;
+            participantKey = inviteCode + ":" + participantId;
 
             // Verificamos si aún tiene otros sockets (otra pestaña abierta)
             boolean hasOthers = sessions.values().stream()
                     .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
 
             if (hasOthers) {
-                log.info("El participante {} aún tiene otras pestañas abiertas. No se programa limpieza.", removedInfo.username());
+                log.info("El participante {} aún tiene otros sockets activos. Omitiendo limpieza.", removedInfo.username());
                 return;
             }
 
-            log.info("Último socket cerrado para {}. Programando limpieza en {}s...", removedInfo.username(), GRACE_PERIOD_SECONDS);
+            // Marcamos una nueva generación esperada para este ciclo de desconexión
+            expectedGeneration = participantGenerations
+                    .computeIfAbsent(participantKey, k -> new AtomicLong(0))
+                    .incrementAndGet();
+
+            log.info("Último socket cerrado para {}. Programando limpieza (gen={}) en {}s...",
+                    removedInfo.username(), expectedGeneration, GRACE_PERIOD_SECONDS);
 
             ScheduledFuture<?> task = scheduler.schedule(() -> {
+                boolean proceedWithCleanup = false;
+
+                // Transición atómica mínima en memoria
                 synchronized (lock) {
                     pendingCleanups.remove(participantKey);
-                    // Verificación final bajo lock antes de ejecutar la acción destructiva
-                    boolean reconnected = sessions.values().stream()
-                            .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
 
-                    if (!reconnected) {
-                        cleanupAction.accept(removedInfo);
+                    long currentGeneration = participantGenerations
+                            .getOrDefault(participantKey, new AtomicLong(-1))
+                            .get();
+
+                    // Si la generación cambió (el usuario volvió a hacer register()), abortamos
+                    if (currentGeneration == expectedGeneration) {
+                        boolean reconnected = sessions.values().stream()
+                                .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+                        if (!reconnected) {
+                            proceedWithCleanup = true;
+                        }
+                    } else {
+                        log.info("Limpieza descartada por generación obsoleta para participantId={}", participantId);
                     }
+                }
+
+                // 🚀 EL I/O PESADO SE EJECUTA FUERA DEL MONITOR LOCK
+                if (proceedWithCleanup) {
+                    cleanupExecutor.submit(() -> {
+                        try {
+                            cleanupAction.accept(removedInfo);
+                        } catch (Exception ex) {
+                            log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
+                        }
+                    });
                 }
             }, GRACE_PERIOD_SECONDS, TimeUnit.SECONDS);
 

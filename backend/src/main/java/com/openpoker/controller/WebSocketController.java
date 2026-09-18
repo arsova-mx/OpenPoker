@@ -2,13 +2,16 @@ package com.openpoker.controller;
 
 import com.openpoker.dto.JoinSessionRequest;
 import com.openpoker.dto.SetTimerRequest;
+import com.openpoker.dto.TicketResponseDTO;
 import com.openpoker.dto.TimerStatusDTO;
+import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
+import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.TicketService;
@@ -25,6 +28,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,6 +44,7 @@ public class WebSocketController {
     private final GameSessionRepository sessionRepository;
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final TicketRepository ticketRepository;
     private final TicketService ticketService;
     private final TicketTimerService ticketTimerService;
 
@@ -51,45 +56,41 @@ public class WebSocketController {
         try {
             String username = resolveUsernameOrNull(headerAccessor);
             var session = sessionRepository.findBySessionCode(inviteCode)
-                                .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
+                    .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
             
             Participant participant;
 
-                // 1. Caso Usuario Registrado
             if (username != null) {
                 User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
                 var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
 
                 if (existingParticipant.isPresent()) {
-                    participant = existingParticipant.get(); // 👈 Si ya está en la sala, solo lo recuperamos
+                    participant = existingParticipant.get();
                 } else {
                     JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, username, null);
-                    service.joinSession(joinRequest); // 👈 Si no existe, lo unimos
+                    service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
-
-            // 2. Caso Invitado (Guest)
             } else if (guestName != null && !guestName.isBlank()) {
                 var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName);
 
                 if (existingGuest.isPresent()) {
-                    participant = existingGuest.get(); // 👈 Si el invitado ya existe (ej. reconexión)
+                    participant = existingGuest.get();
                 } else {
                     JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, guestName);
-                    service.joinSession(joinRequest); // 👈 Si no existe, lo unimos
+                    service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName).orElseThrow();
                 }
             } else {
                 throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
             }
 
-            // 4. Registramos la conexión del WebSocket usando el nombre unificado
             sessionRegistry.register(
                 headerAccessor.getSessionId(), 
                 session.getId(), 
                 participant.getId(), 
-                participant.getEffectiveName(), // 👈 Nombre unificado
+                participant.getEffectiveName(),
                 inviteCode
             );
 
@@ -123,11 +124,10 @@ public class WebSocketController {
             sessionRegistry.unregister(headerAccessor.getSessionId());
 
             List<WebSocketParticipantResponse> participants = mapParticipants(service.getParticipants(inviteCode));
-            var session = sessionRepository.findBySessionCode(inviteCode).orElseThrow();
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/participants", participants);
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.leave", ex);
         }
@@ -151,28 +151,18 @@ public class WebSocketController {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            // 🚀 EJECUCIÓN LIMPIA DIRECTA
             voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
             
-            // Notificaciones en tiempo real a la sala
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             
         } catch (DataIntegrityViolationException ex) {
-            // 🛡️ ESCUDO ANTI-CARRERAS: 
-            // Si el frontend disparó dos veces el voto simultáneamente, el segundo hilo causará esta excepción de llave única.
-            // Como el primer hilo ya guardó el voto con éxito, simplemente lo ignoramos y no alarmamos al usuario.
             log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
-            
         } catch (RuntimeException ex) {
             log.error("💥 ERROR CRÍTICO AL VOTAR EN SALA [{}]:", inviteCode, ex);
-            // Cualquier otro error real se sigue notificando al Frontend
             publishError(inviteCode, "session.vote", ex);
         }
     }
-        
-
 
     @MessageMapping("/session.reveal")
     public void reveal(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
@@ -188,7 +178,6 @@ public class WebSocketController {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
 
-            // 🚀 2. CORRECCIÓN DE ORDEN: (sessionId, participantId, ticketId)
             var revealResults = voteService.revealVotes(sessionInfo.sessionId(), sessionInfo.participantId(), ticketId);
 
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", revealResults);
@@ -202,7 +191,7 @@ public class WebSocketController {
 
     @MessageMapping("/session.reset-votes")
     public void resetVotes(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
-        String inviteCode = null;
+        String rawInviteCode = payload.get("inviteCode");
 
         try {
             String ticketIdStr = payload.get("ticketId");
@@ -210,18 +199,52 @@ public class WebSocketController {
                 throw new IllegalArgumentException("El parámetro ticketId es requerido y no puede estar vacío");
             }
 
-            UUID ticketId = UUID.fromString(payload.get("ticketId"));
+            UUID ticketId = UUID.fromString(ticketIdStr);
 
-        
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
+            
+            // Si no venía en el payload, se obtiene de la sesión registrada
+            String resolvedCode = (rawInviteCode != null && !rawInviteCode.isBlank())
+                    ? rawInviteCode
+                    : sessionInfo.inviteCode();
 
+            // 🔒 Variable inmutable (final) apta para su uso en lambdas
+            final String finalInviteCode = resolvedCode;
+
+            // 1. Resetear votos en la base de datos
             voteService.resetVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId());
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", voteService.getVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId()));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
+
+            // 2. Notificar que los votos y estadísticas quedan vacíos (revealed = false)
+            VotingRRAverage resetVotesPayload = new VotingRRAverage(
+                finalInviteCode,
+                List.of(),
+                false,
+                0.0,
+                null,
+                null
+            );
+            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/votes", resetVotesPayload);
+
+            // 3. Regresar todos los indicadores de voto al reloj de espera ⏳
+            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/vote-status", (Object) Collections.emptyMap());
+
+            // 4. Notificar que el ticket regresó a estado VOTING (la lambda usa finalInviteCode sin error)
+            ticketRepository.findById(ticketId).ifPresent(ticket -> {
+                TicketResponseDTO ticketDto = new TicketResponseDTO(
+                    ticket.getId(),
+                    ticket.getTittle(),
+                    ticket.getDescription(),
+                    ticket.getGameSession().getId(),
+                    ticket.getStatus()
+                );
+                messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/ticket-updated", ticketDto);
+            });
+
+            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/state", service.getSessionByCode(finalInviteCode));
+
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.reset-votes", ex);
+            log.error("Error en session.reset-votes para sala: {}", rawInviteCode, ex);
+            publishError(rawInviteCode, "session.reset-votes", ex);
         }
     }
 
@@ -232,21 +255,16 @@ public class WebSocketController {
         try {
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             inviteCode = sessionInfo.inviteCode();
-
-            // 🚀 Extraemos el participantId de la sesión de WebSocket
             UUID participantId = sessionInfo.participantId();
 
-            // 1. Obtenemos el ticketId que viene en el payload
             String ticketIdStr = payload.get("ticketId");
             if (ticketIdStr == null || ticketIdStr.isBlank()) {
                 throw new IllegalArgumentException("Se requiere el ticketId para finalizar la estimación.");
             }
             UUID ticketId = UUID.fromString(ticketIdStr);
 
-            // 2. Finalizamos el ticket en TicketService
-            var ticketResponse = ticketService.finishTicket(ticketId,participantId);
+            var ticketResponse = ticketService.finishTicket(ticketId, participantId);
 
-            // 3. Transmitimos el estado actualizado del ticket a la sala
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/ticket-updated", ticketResponse);
 
         } catch (RuntimeException ex) {
@@ -261,14 +279,13 @@ public class WebSocketController {
             participant.getRole() != null ? participant.getRole().name() : "",
             participant.getUser() == null
         )).toList();
-           
     }
 
     private String resolveUsernameOrNull(SimpMessageHeaderAccessor headerAccessor) {
         try {
             return resolveUsername(headerAccessor);
         } catch (Exception e) {
-            return null; // Es un invitado sin token JWT
+            return null;
         }
     }
 
@@ -324,16 +341,12 @@ public class WebSocketController {
             inviteCode = sessionInfo.inviteCode();
 
             SetTimerRequest request = new SetTimerRequest(durationSeconds);
-
-            // Llamamos al servicio recién creado
-            TimerStatusDTO timerStatus = ticketTimerService.setTimer(
+            ticketTimerService.setTimer(
                 sessionInfo.sessionId(), 
                 ticketId, 
                 sessionInfo.participantId(), 
                 request
             );
-
-            // La notificación por WS ya se envía internamente en TicketTimerService
 
         } catch (RuntimeException ex) {
             publishError(inviteCode, "session.set-timer", ex);

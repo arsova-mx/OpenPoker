@@ -7,12 +7,14 @@ import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.VotingResultsResponse;
 import com.openpoker.entity.*;
 import com.openpoker.globalexception.*;
+import com.openpoker.model.CardSeries;
 import com.openpoker.repository.CardValueRepository;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.repository.VoteRepository;
+import com.openpoker.repository.VotingDeckRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -35,10 +37,8 @@ public class VoteService {
     private final ParticipantRepository participantRepository;
     private final TicketRepository ticketRepository;
     private final CardValueRepository cardValueRepository;
+    private final VotingDeckRepository deckRepository;
     private final VoteStatisticsService voteStatisticsService;
-
-    // UUID conocido de tu baraja FIBONACCI en MySQL para fallback defensivo
-    private static final String DEFAULT_FIBONACCI_DECK_ID = "a054d38e-62e9-4449-9013-00bd92df6ceb";
 
     @Transactional
     public VoteResponse submitVote(UUID sessionId, UUID ticketId, UUID participantId, UUID value) {
@@ -136,7 +136,6 @@ public class VoteService {
                 })
                 .toList();
 
-        // 🚀 Se retorna el estado de revelado del Ticket específico, no el global de la sesión
         return new VotingResultsResponse(session.getSessionCode(), response, isTicketRevealed);
     }
 
@@ -197,27 +196,25 @@ public class VoteService {
 
         sessionRepository.save(session);
 
-        // 1. Calcular estadísticas (promedio, consenso, outliers)
+        // 1. Calcular estadísticas
         VoteStatisticsDTO statistics = voteStatisticsService.calculateStatistics(votes);
         
-        // 2. Buscar la carta sugerida convirtiendo el UUID a String para el WHERE c.deck_id = :deckId
+        // 2. Determinar la baraja (usar la de la sesión o fallback por serie FIBONACCI en DB)
+        VotingDeck activeDeck = session.getDeck();
+        if (activeDeck == null) {
+            activeDeck = deckRepository.findBySeriesType(CardSeries.FIBONACCI).orElse(null);
+        }
+
+        // 3. Buscar carta sugerida de forma portable usando el ID real obtenido de la base de datos
         CardValue suggested = null;
-        if (session.getDeck() != null && session.getDeck().getId() != null) {
+        if (activeDeck != null && statistics.average() > 0) {
             suggested = cardValueRepository.findClosestByWeight(
-                session.getDeck().getId().toString(), 
+                activeDeck.getId().toString(), 
                 statistics.average()
             ).orElse(null);
         }
 
-        // Fallback defensivo si la sesión no tenía deck asignado o el deck no devolvió carta
-        if (suggested == null && statistics.average() > 0) {
-            suggested = cardValueRepository.findClosestByWeight(
-                DEFAULT_FIBONACCI_DECK_ID, 
-                statistics.average()
-            ).orElse(null);
-        }
-
-        // 3. Mapear votos a DTOs
+        // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
                 .map(v -> new VoteResponse(
                     v.getId(), 
@@ -227,7 +224,7 @@ public class VoteService {
                 ))
                 .toList();
 
-        // 4. Retornar el DTO con el valor real de la carta encontrada
+        // 5. Retornar el DTO con sugerencia calculada
         return new VotingRRAverage(
                 session.getSessionCode(),
                 voteResponses,
