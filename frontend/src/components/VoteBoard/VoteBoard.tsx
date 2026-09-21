@@ -57,8 +57,8 @@ export const VoteBoard: React.FC<VoteBoardProps> = ({
             // Texto descriptivo accesible para lectores de pantalla
             const accessibleStatusText = revealed
               ? voteData
-                ? `Votó ${voteData.cardValue}`
-                : "Sin voto registrado"
+                ? `${name} Votó ${voteData.cardValue}`
+                : `${name} no tiene voto registrado`
               : hasVoted
               ? `${name} ya emitió su voto`
               : `${name} está pensando su voto`;

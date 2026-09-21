@@ -134,6 +134,7 @@ public class WebSocketSessionRegistry {
 
                         if (!reconnected) {
                             proceedWithCleanup = true;
+                            participantGenerations.remove(participantKey);
                         }
                     } else {
                         log.info("Limpieza descartada por generación obsoleta para participantId={}", participantId);

@@ -19,6 +19,11 @@ import type {
   VotingRRAverageResponse 
 } from "@/types";
 
+// Extensión defensiva en caso de que el backend envíe ticketId en el payload
+interface ExtendedVotingRRAverageResponse extends VotingRRAverageResponse {
+  ticketId?: string;
+}
+
 export default function VotingBoard() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
@@ -102,24 +107,37 @@ export default function VotingBoard() {
       }
     });
 
-    // 3. Suscripción a Resultados de Votación (Cartas reveladas y estadísticas)
-    const subVotes = subscribe<VotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
+    // 3. Suscripción a Resultados de Votación (Filtrada por ticketId)
+    const subVotes = subscribe<ExtendedVotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
+        // Ignorar si el mensaje trae ticketId y no coincide con el ticket activo
+        if (data.ticketId && activeTicket && data.ticketId !== activeTicket.id) {
+          return;
+        }
+
         if (data.revealed) {
-          // 🚀 CASO REVELADO: Montar estadísticas y destapar cartas
           setSessionVotesData(data);
           setActiveTicket((prev) => (prev ? { ...prev, status: "REVEALED" } : null));
           setTickets((prev) =>
-            prev.map((t) => (t.status === "VOTING" ? { ...t, status: "REVEALED" } : t))
+            prev.map((t) => {
+              if (data.ticketId) {
+                return t.id === data.ticketId ? { ...t, status: "REVEALED" } : t;
+              }
+              return t.id === activeTicket?.id ? { ...t, status: "REVEALED" } : t;
+            })
           );
         } else {
-          // 🚀 CASO NUEVA RONDA: Limpiar inmediatamente en la pantalla del invitado
           setSessionVotesData(null);
           setSelectedCard(null);
           setVoteStatusMap({});
           setActiveTicket((prev) => (prev ? { ...prev, status: "VOTING" } : null));
           setTickets((prev) =>
-            prev.map((t) => (t.status === "REVEALED" ? { ...t, status: "VOTING" } : t))
+            prev.map((t) => {
+              if (data.ticketId) {
+                return t.id === data.ticketId ? { ...t, status: "VOTING" } : t;
+              }
+              return t.id === activeTicket?.id ? { ...t, status: "VOTING" } : t;
+            })
           );
         }
       }
@@ -160,6 +178,9 @@ export default function VotingBoard() {
     } else {
       joinPayload.username = currentUsername;
     }
+    if (activeTicket?.id) {
+      joinPayload.ticketId = activeTicket.id;
+    }
     publish("/app/session.join", joinPayload);
 
     return () => {
@@ -168,7 +189,7 @@ export default function VotingBoard() {
       subVotes?.unsubscribe();
       subTicketUpdated?.unsubscribe();
     };
-  }, [wsConnected, code, currentUsername, isGuest, publish, subscribe, setSelectedCard]);
+  }, [wsConnected, code, currentUsername, isGuest, publish, subscribe, setSelectedCard, activeTicket]);
 
   // Limpiar estados de votación cuando cambia el ticket activo
   useEffect(() => {
@@ -210,7 +231,10 @@ export default function VotingBoard() {
     try {
       const updated = await ticketService.updateStatus(ticketId, newStatus);
 
-      setActiveTicket((prev) => (prev?.id === ticketId ? updated : prev));
+      // Si se activa votación o si ya era el ticket activo, se sincroniza en la mesa
+      if (newStatus === "VOTING" || activeTicket?.id === ticketId) {
+        setActiveTicket(updated);
+      }
       setTickets((prev) => prev.map((t) => (t.id === ticketId ? updated : t)));
 
       if (wsConnected && code) {
@@ -267,12 +291,19 @@ export default function VotingBoard() {
     }
   };
 
-  // Voto: Transporte único con UI optimista
+  // Voto: Envío primario por WebSocket para broadcast en vivo, con fallback a REST
   const handleSubmitVote = async () => {
     if (!selectedCard || !code || !activeTicket) return;
 
     try {
-      await castVote();
+      if (wsConnected) {
+        publish("/app/session.vote", {
+          cardValue: selectedCard,
+          ticketId: activeTicket.id,
+        });
+      } else {
+        await castVote();
+      }
 
       const me = participants.find(
         (p) => (p.effectiveName || p.username || p.displayName) === currentUsername
@@ -283,12 +314,12 @@ export default function VotingBoard() {
         [myId]: true,
         [currentUsername]: true,
       }));
-    } catch {
-      // Ignorar si falla la petición
+    } catch (err) {
+      console.error("Error al emitir el voto:", err);
     }
   };
 
-  // Revelar: Transporte único con protección de spam
+  // Revelar: WebSocket con fallback a REST
   const handleRevealVotes = async () => {
     if (!activeTicket || isRevealing) return;
     setIsRevealing(true);
@@ -296,7 +327,6 @@ export default function VotingBoard() {
     try {
       if (wsConnected && code) {
         publish("/app/session.reveal", {
-          inviteCode: code,
           ticketId: activeTicket.id,
         });
       } else {
@@ -307,31 +337,36 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Resetea en backend y sincroniza todos los estados locales
+  // Nueva Ronda: Backend primero con fallback REST antes de alterar la UI local
   const handleResetVotes = async () => {
     if (!activeTicket || !session) return;
 
     setIsRevealing(false);
 
-    if (wsConnected && code) {
-      publish("/app/session.reset-votes", {
-        inviteCode: code,
-        username: currentUsername,
-        sessionId: session.id,
-        ticketId: activeTicket.id,
-      });
+    try {
+      if (wsConnected && code) {
+        publish("/app/session.reset-votes", {
+          ticketId: activeTicket.id,
+        });
+      } else {
+        // Fallback REST cuando el WebSocket está desconectado
+        await ticketService.updateStatus(activeTicket.id, "VOTING");
+      }
+
+      // Solo actualizar estado si la solicitud no arrojó excepción
+      setSelectedCard(null);
+      setVoteStatusMap({});
+      setSessionVotesData(null);
+
+      const resetTicket: TicketResponse = {
+        ...activeTicket,
+        status: "VOTING",
+      };
+      setActiveTicket(resetTicket);
+      setTickets((prev) => prev.map((t) => (t.id === activeTicket.id ? resetTicket : t)));
+    } catch (error) {
+      console.error("No se pudo reiniciar la ronda en el servidor:", error);
     }
-
-    setSelectedCard(null);
-    setVoteStatusMap({});
-    setSessionVotesData(null);
-
-    const resetTicket: TicketResponse = {
-      ...activeTicket,
-      status: "VOTING",
-    };
-    setActiveTicket(resetTicket);
-    setTickets((prev) => prev.map((t) => (t.id === activeTicket.id ? resetTicket : t)));
   };
 
   // Estado de revelación unificado y reactivo

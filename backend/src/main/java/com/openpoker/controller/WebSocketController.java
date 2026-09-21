@@ -191,7 +191,7 @@ public class WebSocketController {
 
     @MessageMapping("/session.reset-votes")
     public void resetVotes(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
-        String rawInviteCode = payload.get("inviteCode");
+        String inviteCode = null;
 
         try {
             String ticketIdStr = payload.get("ticketId");
@@ -202,33 +202,27 @@ public class WebSocketController {
             UUID ticketId = UUID.fromString(ticketIdStr);
 
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            
-            // Si no venía en el payload, se obtiene de la sesión registrada
-            String resolvedCode = (rawInviteCode != null && !rawInviteCode.isBlank())
-                    ? rawInviteCode
-                    : sessionInfo.inviteCode();
-
-            // 🔒 Variable inmutable (final) apta para su uso en lambdas
-            final String finalInviteCode = resolvedCode;
+            inviteCode = sessionInfo.inviteCode(); // 🔒 Siempre usar la sala registrada y autenticada
 
             // 1. Resetear votos en la base de datos
             voteService.resetVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId());
 
-            // 2. Notificar que los votos y estadísticas quedan vacíos (revealed = false)
+            // 2. Notificar que los votos y estadísticas quedan vacíos
             VotingRRAverage resetVotesPayload = new VotingRRAverage(
-                finalInviteCode,
+                inviteCode,
                 List.of(),
                 false,
                 0.0,
                 null,
                 null
             );
-            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/votes", resetVotesPayload);
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", resetVotesPayload);
 
-            // 3. Regresar todos los indicadores de voto al reloj de espera ⏳
-            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/vote-status", (Object) Collections.emptyMap());
+            // 3. Regresar todos los indicadores de voto al reloj de espera
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", (Object) Collections.emptyMap());
 
-            // 4. Notificar que el ticket regresó a estado VOTING (la lambda usa finalInviteCode sin error)
+            // 4. Notificar que el ticket regresó a estado VOTING
+            final String finalInviteCode = inviteCode;
             ticketRepository.findById(ticketId).ifPresent(ticket -> {
                 TicketResponseDTO ticketDto = new TicketResponseDTO(
                     ticket.getId(),
@@ -240,11 +234,11 @@ public class WebSocketController {
                 messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/ticket-updated", ticketDto);
             });
 
-            messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/state", service.getSessionByCode(finalInviteCode));
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
 
         } catch (RuntimeException ex) {
-            log.error("Error en session.reset-votes para sala: {}", rawInviteCode, ex);
-            publishError(rawInviteCode, "session.reset-votes", ex);
+            log.error("Error en session.reset-votes para sala: {}", inviteCode, ex);
+            publishError(inviteCode, "session.reset-votes", ex);
         }
     }
 
