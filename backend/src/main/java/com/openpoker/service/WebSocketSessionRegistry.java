@@ -1,6 +1,9 @@
 package com.openpoker.service;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -40,19 +43,17 @@ public class WebSocketSessionRegistry {
             }
     );
 
-    // Executor dedicado para ejecutar el I/O pesado (DB y WebSocket broadcast) fuera del monitor
-    private final ExecutorService cleanupExecutor = Executors.newCachedThreadPool(
-            r -> {
-                Thread t = new Thread(r, "ws-cleanup-worker");
-                t.setDaemon(true);
-                return t;
-            }
-    );
+    // Executor administrado por Spring e inyectado desde AsyncConfig
+    private final AsyncTaskExecutor cleanupExecutor;
 
     private final Object lock = new Object();
 
     // Tiempo de gracia para reconexiones automáticas
     private static final long GRACE_PERIOD_SECONDS = 10;
+
+    public WebSocketSessionRegistry(@Qualifier("wsCleanupExecutor") AsyncTaskExecutor cleanupExecutor) {
+        this.cleanupExecutor = cleanupExecutor;
+    }
 
     public void register(String wsSessionId, UUID sessionId, UUID participantId, String username, String inviteCode) {
         String participantKey = inviteCode + ":" + participantId;
@@ -141,7 +142,7 @@ public class WebSocketSessionRegistry {
                     }
                 }
 
-                // 🚀 EL I/O PESADO SE EJECUTA FUERA DEL MONITOR LOCK
+                // El I/O pesado corre en el pool acotado inyectado por Spring
                 if (proceedWithCleanup) {
                     cleanupExecutor.submit(() -> {
                         try {
@@ -154,6 +155,19 @@ public class WebSocketSessionRegistry {
             }, GRACE_PERIOD_SECONDS, TimeUnit.SECONDS);
 
             pendingCleanups.put(participantKey, task);
+        }
+    }
+
+    @PreDestroy
+    public void destroy() {
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
         }
     }
 }

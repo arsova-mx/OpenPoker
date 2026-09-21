@@ -115,6 +115,33 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     }
   };
 
+  // 6. Resetear votos (Fallback REST para iniciar nueva ronda)
+  const resetVotes = async () => {
+    if (!sessionCode || !ticketId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await voteService.resetVotes(sessionCode, ticketId);
+      if (activeTicketRef.current === ticketId) {
+        setVotes([]);
+        setRevealed(false);
+        setSelectedCard(null);
+      }
+      await fetchVotes();
+    } catch (err: unknown) {
+      if (activeTicketRef.current === ticketId) {
+        if (axios.isAxiosError(err)) {
+          setError(err.response?.data?.message || err.message || "Error al reiniciar votos");
+        } else {
+          setError("Error al reiniciar votos");
+        }
+      }
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     selectedCard,
     setSelectedCard,
@@ -122,6 +149,7 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
     votes,
     revealed,
     revealVotes,
+    resetVotes,
     loading,
     error,
   };

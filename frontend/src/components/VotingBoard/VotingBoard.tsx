@@ -68,6 +68,7 @@ export default function VotingBoard() {
     votes,
     revealed,
     revealVotes,
+    resetVotes,
     loading: votingLoading,
     error: votingError,
   } = useVoting(code || "", activeTicket ? activeTicket.id : null);
@@ -291,29 +292,32 @@ export default function VotingBoard() {
     }
   };
 
-  // Voto: Envío primario por WebSocket para broadcast en vivo, con fallback a REST
+  // Voto: Envío por WebSocket delegado a /vote-status para confirmación real
   const handleSubmitVote = async () => {
     if (!selectedCard || !code || !activeTicket) return;
 
     try {
       if (wsConnected) {
+        // En STOMP no actualizamos voteStatusMap optimísticamente;
+        // el servidor confirma emitiendo en /topic/session/${code}/vote-status.
         publish("/app/session.vote", {
           cardValue: selectedCard,
           ticketId: activeTicket.id,
         });
       } else {
+        // En fallback HTTP sí sabemos si la petición completó con éxito
         await castVote();
-      }
 
-      const me = participants.find(
-        (p) => (p.effectiveName || p.username || p.displayName) === currentUsername
-      );
-      const myId = me?.id || me?.participantId || currentUsername;
-      setVoteStatusMap((prev) => ({
-        ...prev,
-        [myId]: true,
-        [currentUsername]: true,
-      }));
+        const me = participants.find(
+          (p) => (p.effectiveName || p.username || p.displayName) === currentUsername
+        );
+        const myId = me?.id || me?.participantId || currentUsername;
+        setVoteStatusMap((prev) => ({
+          ...prev,
+          [myId]: true,
+          [currentUsername]: true,
+        }));
+      }
     } catch (err) {
       console.error("Error al emitir el voto:", err);
     }
@@ -337,23 +341,23 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Backend primero con fallback REST antes de alterar la UI local
+  // Nueva Ronda: Backend primero (WS o REST reset) antes de alterar la UI local
   const handleResetVotes = async () => {
-    if (!activeTicket || !session) return;
+    if (!activeTicket || !session || !code) return;
 
     setIsRevealing(false);
 
     try {
-      if (wsConnected && code) {
+      if (wsConnected) {
         publish("/app/session.reset-votes", {
           ticketId: activeTicket.id,
         });
       } else {
-        // Fallback REST cuando el WebSocket está desconectado
-        await ticketService.updateStatus(activeTicket.id, "VOTING");
+        // Fallback REST real que borra votos en base de datos
+        await resetVotes();
       }
 
-      // Solo actualizar estado si la solicitud no arrojó excepción
+      // Solo actualizar estado si la solicitud completó con éxito
       setSelectedCard(null);
       setVoteStatusMap({});
       setSessionVotesData(null);
