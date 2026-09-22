@@ -1,15 +1,17 @@
 package com.openpoker.service;
 
-import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.AsyncTaskExecutor;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -33,17 +35,8 @@ public class WebSocketSessionRegistry {
     // Generador de versión por participante para invalidar limpiezas obsoletas sin lock
     private final Map<String, AtomicLong> participantGenerations = new ConcurrentHashMap<>();
 
-    // Pool para tareas programadas (evita que un solo hilo bloquee la cola)
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(
-            Math.max(2, Runtime.getRuntime().availableProcessors()),
-            r -> {
-                Thread t = new Thread(r, "ws-session-cleanup");
-                t.setDaemon(true);
-                return t;
-            }
-    );
-
-    // Executor administrado por Spring e inyectado desde AsyncConfig
+    // Componentes administrados por Spring e inyectados desde AsyncConfig
+    private final TaskScheduler scheduler;
     private final AsyncTaskExecutor cleanupExecutor;
 
     private final Object lock = new Object();
@@ -51,7 +44,10 @@ public class WebSocketSessionRegistry {
     // Tiempo de gracia para reconexiones automáticas
     private static final long GRACE_PERIOD_SECONDS = 10;
 
-    public WebSocketSessionRegistry(@Qualifier("wsCleanupExecutor") AsyncTaskExecutor cleanupExecutor) {
+    public WebSocketSessionRegistry(
+            @Qualifier("wsCleanupScheduler") TaskScheduler scheduler,
+            @Qualifier("wsCleanupExecutor") AsyncTaskExecutor cleanupExecutor) {
+        this.scheduler = scheduler;
         this.cleanupExecutor = cleanupExecutor;
     }
 
@@ -85,7 +81,7 @@ public class WebSocketSessionRegistry {
 
     /**
      * Programa la limpieza con margen de espera. La decisión y el estado se toman bajo lock,
-     * pero la ejecución destructiva pesada (DB / STOMP) corre fuera del monitor.
+     * pero la ejecución destructiva pesada (DB / STOMP) corre en el pool acotado fuera del monitor.
      */
     public void scheduleCleanupIfLast(String wsSessionId, Consumer<SessionInfo> cleanupAction) {
         SessionInfo removedInfo;
@@ -117,6 +113,8 @@ public class WebSocketSessionRegistry {
             log.info("Último socket cerrado para {}. Programando limpieza (gen={}) en {}s...",
                     removedInfo.username(), expectedGeneration, GRACE_PERIOD_SECONDS);
 
+            // Programamos el timer a través del TaskScheduler de Spring usando Instant
+            Instant executionTime = Instant.now().plusSeconds(GRACE_PERIOD_SECONDS);
             ScheduledFuture<?> task = scheduler.schedule(() -> {
                 boolean proceedWithCleanup = false;
 
@@ -142,7 +140,7 @@ public class WebSocketSessionRegistry {
                     }
                 }
 
-                // El I/O pesado corre en el pool acotado inyectado por Spring
+                // El I/O pesado corre en el pool acotado de Spring con control de backpressure
                 if (proceedWithCleanup) {
                     cleanupExecutor.submit(() -> {
                         try {
@@ -152,22 +150,9 @@ public class WebSocketSessionRegistry {
                         }
                     });
                 }
-            }, GRACE_PERIOD_SECONDS, TimeUnit.SECONDS);
+            }, executionTime);
 
             pendingCleanups.put(participantKey, task);
-        }
-    }
-
-    @PreDestroy
-    public void destroy() {
-        scheduler.shutdown();
-        try {
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
         }
     }
 }

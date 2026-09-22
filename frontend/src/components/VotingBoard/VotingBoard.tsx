@@ -75,6 +75,18 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
+  // Sincronizar voteStatusMap a partir del polling de votos cuando no hay WebSocket conectado
+  useEffect(() => {
+    if (wsConnected) return;
+
+    const newMap: VoteStatusMap = {};
+    votes.forEach((v) => {
+      if (v.username) newMap[v.username] = true;
+      
+    });
+    setVoteStatusMap(newMap);
+  }, [votes, wsConnected]);
+
   // Cargar sesión y baraja inicial
   useEffect(() => {
     if (!code) return;
@@ -101,7 +113,7 @@ export default function VotingBoard() {
       }
     });
 
-    // 2. Suscripción a Quién votó
+    // 2. Suscripción a Quién votó (Confirmación autoritativa del servidor)
     const subVoteStatus = subscribe<VoteStatusMap>(`/topic/session/${code}/vote-status`, (data) => {
       if (data && typeof data === "object") {
         setVoteStatusMap(data);
@@ -111,7 +123,6 @@ export default function VotingBoard() {
     // 3. Suscripción a Resultados de Votación (Filtrada por ticketId)
     const subVotes = subscribe<ExtendedVotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
-        // Ignorar si el mensaje trae ticketId y no coincide con el ticket activo
         if (data.ticketId && activeTicket && data.ticketId !== activeTicket.id) {
           return;
         }
@@ -222,7 +233,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // Cambiar estado manual del ticket
+  // Cambiar estado manual del ticket asegurando reseteo en BD si se reactiva a VOTING
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -230,9 +241,20 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
+      // Si se reactiva la votación, primero purgamos los votos viejos en la BD
+      if (newStatus === "VOTING") {
+        if (wsConnected && code) {
+          publish("/app/session.reset-votes", { ticketId });
+        } else {
+          await resetVotes();
+        }
+        setSelectedCard(null);
+        setVoteStatusMap({});
+        setSessionVotesData(null);
+      }
+
       const updated = await ticketService.updateStatus(ticketId, newStatus);
 
-      // Si se activa votación o si ya era el ticket activo, se sincroniza en la mesa
       if (newStatus === "VOTING" || activeTicket?.id === ticketId) {
         setActiveTicket(updated);
       }
@@ -292,31 +314,20 @@ export default function VotingBoard() {
     }
   };
 
-  // Voto: Envío por WebSocket delegado a /vote-status para confirmación real
+  // Voto: Sin actualizaciones optimistas en STOMP ni mutaciones manuales sueltas
   const handleSubmitVote = async () => {
     if (!selectedCard || !code || !activeTicket) return;
 
     try {
       if (wsConnected) {
-        // En STOMP no actualizamos voteStatusMap optimísticamente;
-        // el servidor confirma emitiendo en /topic/session/${code}/vote-status.
+        // En STOMP, el servidor confirma emitiendo en /topic/session/${code}/vote-status
         publish("/app/session.vote", {
           cardValue: selectedCard,
           ticketId: activeTicket.id,
         });
       } else {
-        // En fallback HTTP sí sabemos si la petición completó con éxito
+        // En HTTP fallback, castVote ejecuta fetchVotes y el useEffect sincroniza voteStatusMap
         await castVote();
-
-        const me = participants.find(
-          (p) => (p.effectiveName || p.username || p.displayName) === currentUsername
-        );
-        const myId = me?.id || me?.participantId || currentUsername;
-        setVoteStatusMap((prev) => ({
-          ...prev,
-          [myId]: true,
-          [currentUsername]: true,
-        }));
       }
     } catch (err) {
       console.error("Error al emitir el voto:", err);
@@ -341,7 +352,7 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Backend primero (WS o REST reset) antes de alterar la UI local
+  // Nueva Ronda: Purga de BD vía WS o REST
   const handleResetVotes = async () => {
     if (!activeTicket || !session || !code) return;
 
@@ -353,11 +364,9 @@ export default function VotingBoard() {
           ticketId: activeTicket.id,
         });
       } else {
-        // Fallback REST real que borra votos en base de datos
         await resetVotes();
       }
 
-      // Solo actualizar estado si la solicitud completó con éxito
       setSelectedCard(null);
       setVoteStatusMap({});
       setSessionVotesData(null);
@@ -373,7 +382,6 @@ export default function VotingBoard() {
     }
   };
 
-  // Estado de revelación unificado y reactivo
   const isRevealed = Boolean(
     sessionVotesData?.revealed ||
     activeTicket?.status === "REVEALED" ||
