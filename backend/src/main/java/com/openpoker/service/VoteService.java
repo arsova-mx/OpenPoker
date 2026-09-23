@@ -45,8 +45,8 @@ public class VoteService {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
+        .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
         if (!ticket.getGameSession().getId().equals(sessionId)) {
             throw new IllegalArgumentException("El ticket no pertenece a la sesión proporcionada");
@@ -106,8 +106,8 @@ public class VoteService {
     public VotingResultsResponse getVotes(UUID sessionId, UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
+        .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
         Participant participant = participantRepository.findById(participantId)
                 .orElseThrow(() -> new ParticipantNotFoundException("Participante no encontrado"));
 
@@ -146,8 +146,8 @@ public class VoteService {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
                 
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
+        .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
         List<Participant> participants = participantRepository.findAllByGameSession(session);
         
@@ -167,8 +167,8 @@ public class VoteService {
     public VotingRRAverage revealVotes(UUID sessionId, UUID participantId, UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
+        .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
         if (ticket.getStatus() == TicketStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");
@@ -270,8 +270,8 @@ public class VoteService {
     public void resetVotes(UUID sessionId, UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
+        Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
         if (ticket.getStatus() == TicketStatus.FINISHED) {
             throw new SessionNotInVotingException("Session finalizada");

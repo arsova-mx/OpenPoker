@@ -246,7 +246,7 @@ export default function VotingBoard() {
         if (wsConnected && code) {
           publish("/app/session.reset-votes", { ticketId });
         } else {
-          await resetVotes();
+          await resetVotes(ticketId);
         }
         setSelectedCard(null);
         setVoteStatusMap({});

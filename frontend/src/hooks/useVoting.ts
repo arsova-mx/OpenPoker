@@ -116,20 +116,26 @@ export const useVoting = (sessionCode: string, ticketId: string | null) => {
   };
 
   // 6. Resetear votos (Fallback REST para iniciar nueva ronda)
-  const resetVotes = async () => {
-    if (!sessionCode || !ticketId) return;
+  const resetVotes = async (targetTicketId?: string) => {
+    // Si viene targetTicketId lo usa, si no, recurre al ticketId activo del hook
+    const idToReset = targetTicketId ?? ticketId;
+    if (!sessionCode || !idToReset) return;
+
     setLoading(true);
     setError(null);
     try {
-      await voteService.resetVotes(sessionCode, ticketId);
-      if (activeTicketRef.current === ticketId) {
+      await voteService.resetVotes(sessionCode, idToReset);
+
+      // Solo limpiamos y refrescamos el estado de la mesa si el ticket reseteado
+      // es el que actualmente está seleccionado en la vista
+      if (activeTicketRef.current === idToReset) {
         setVotes([]);
         setRevealed(false);
         setSelectedCard(null);
+        await fetchVotes();
       }
-      await fetchVotes();
     } catch (err: unknown) {
-      if (activeTicketRef.current === ticketId) {
+      if (activeTicketRef.current === idToReset) {
         if (axios.isAxiosError(err)) {
           setError(err.response?.data?.message || err.message || "Error al reiniciar votos");
         } else {

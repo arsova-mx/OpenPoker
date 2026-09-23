@@ -113,12 +113,11 @@ public class WebSocketSessionRegistry {
             log.info("Último socket cerrado para {}. Programando limpieza (gen={}) en {}s...",
                     removedInfo.username(), expectedGeneration, GRACE_PERIOD_SECONDS);
 
-            // Programamos el timer a través del TaskScheduler de Spring usando Instant
             Instant executionTime = Instant.now().plusSeconds(GRACE_PERIOD_SECONDS);
             ScheduledFuture<?> task = scheduler.schedule(() -> {
                 boolean proceedWithCleanup = false;
 
-                // Transición atómica mínima en memoria
+                // 1. Verificación preliminar al vencer el temporizador
                 synchronized (lock) {
                     pendingCleanups.remove(participantKey);
 
@@ -126,27 +125,50 @@ public class WebSocketSessionRegistry {
                             .getOrDefault(participantKey, new AtomicLong(-1))
                             .get();
 
-                    // Si la generación cambió (el usuario volvió a hacer register()), abortamos
                     if (currentGeneration == expectedGeneration) {
                         boolean reconnected = sessions.values().stream()
                                 .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
 
                         if (!reconnected) {
                             proceedWithCleanup = true;
-                            participantGenerations.remove(participantKey);
+                            // OJO: No removemos participantGenerations aquí para permitir
+                            // que si ocurre un register() mientras la tarea hace cola,
+                            // se incremente y se detecte en el worker.
                         }
                     } else {
                         log.info("Limpieza descartada por generación obsoleta para participantId={}", participantId);
                     }
                 }
 
-                // El I/O pesado corre en el pool acotado de Spring con control de backpressure
                 if (proceedWithCleanup) {
                     cleanupExecutor.submit(() -> {
-                        try {
-                            cleanupAction.accept(removedInfo);
-                        } catch (Exception ex) {
-                            log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
+                        boolean canExecuteDestructiveAction = false;
+
+                        // 2. Doble verificación inmediata antes de la mutación destructiva
+                        synchronized (lock) {
+                            long finalGeneration = participantGenerations
+                                    .getOrDefault(participantKey, new AtomicLong(-1))
+                                    .get();
+
+                            boolean hasActiveSockets = sessions.values().stream()
+                                    .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+                            // Si nadie se reconectó en la cola del pool y sigue la misma generación
+                            if (finalGeneration == expectedGeneration && !hasActiveSockets) {
+                                canExecuteDestructiveAction = true;
+                                participantGenerations.remove(participantKey);
+                            } else {
+                                log.info("Reconexión detectada justo antes de ejecutar la limpieza para {}. Abortando.", removedInfo.username());
+                            }
+                        }
+
+                        // 3. Ejecución I/O pesada (DB, broadcast STOMP, etc.) fuera de todo lock
+                        if (canExecuteDestructiveAction) {
+                            try {
+                                cleanupAction.accept(removedInfo);
+                            } catch (Exception ex) {
+                                log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
+                            }
                         }
                     });
                 }
