@@ -82,7 +82,6 @@ export default function VotingBoard() {
     const newMap: VoteStatusMap = {};
     votes.forEach((v) => {
       if (v.username) newMap[v.username] = true;
-      
     });
     setVoteStatusMap(newMap);
   }, [votes, wsConnected]);
@@ -233,7 +232,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // Cambiar estado manual del ticket asegurando reseteo en BD si se reactiva a VOTING
+  // Cambiar estado manual del ticket esperando siempre el reset REST para evitar carreras entre canales
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -241,13 +240,9 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
-      // Si se reactiva la votación, primero purgamos los votos viejos en la BD
+      // Si se reactiva la votación, aseguramos primero la purga en BD vía REST
       if (newStatus === "VOTING") {
-        if (wsConnected && code) {
-          publish("/app/session.reset-votes", { ticketId });
-        } else {
-          await resetVotes(ticketId);
-        }
+        await resetVotes(ticketId);
         setSelectedCard(null);
         setVoteStatusMap({});
         setSessionVotesData(null);
@@ -314,19 +309,17 @@ export default function VotingBoard() {
     }
   };
 
-  // Voto: Sin actualizaciones optimistas en STOMP ni mutaciones manuales sueltas
+  // Voto: STOMP o HTTP fallback
   const handleSubmitVote = async () => {
     if (!selectedCard || !code || !activeTicket) return;
 
     try {
       if (wsConnected) {
-        // En STOMP, el servidor confirma emitiendo en /topic/session/${code}/vote-status
         publish("/app/session.vote", {
           cardValue: selectedCard,
           ticketId: activeTicket.id,
         });
       } else {
-        // En HTTP fallback, castVote ejecuta fetchVotes y el useEffect sincroniza voteStatusMap
         await castVote();
       }
     } catch (err) {
@@ -352,20 +345,14 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Purga de BD vía WS o REST
+  // Nueva Ronda: Purga de BD vía REST asegurando consistencia transaccional
   const handleResetVotes = async () => {
     if (!activeTicket || !session || !code) return;
 
     setIsRevealing(false);
 
     try {
-      if (wsConnected) {
-        publish("/app/session.reset-votes", {
-          ticketId: activeTicket.id,
-        });
-      } else {
-        await resetVotes();
-      }
+      await resetVotes(activeTicket.id);
 
       setSelectedCard(null);
       setVoteStatusMap({});

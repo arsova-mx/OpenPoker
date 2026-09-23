@@ -15,33 +15,20 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
-/**
- * Mapea cada sesión WebSocket a los datos del usuario conectado.
- * Coordina la reconexión rápida mediante generaciones atómicas sin bloquear
- * el registro ante limpiezas lentas de base de datos.
- */
 @Slf4j
 @Component
 public class WebSocketSessionRegistry {
 
     public record SessionInfo(UUID sessionId, UUID participantId, String username, String inviteCode) {}
 
-    // Registro de sockets activos
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
-    
-    // Tareas pendientes por participante
     private final Map<String, ScheduledFuture<?>> pendingCleanups = new ConcurrentHashMap<>();
-
-    // Generador de versión por participante para invalidar limpiezas obsoletas sin lock
     private final Map<String, AtomicLong> participantGenerations = new ConcurrentHashMap<>();
 
-    // Componentes administrados por Spring e inyectados desde AsyncConfig
     private final TaskScheduler scheduler;
     private final AsyncTaskExecutor cleanupExecutor;
-
     private final Object lock = new Object();
 
-    // Tiempo de gracia para reconexiones automáticas
     private static final long GRACE_PERIOD_SECONDS = 10;
 
     public WebSocketSessionRegistry(
@@ -58,7 +45,7 @@ public class WebSocketSessionRegistry {
             // 1. Invalidamos cualquier generación anterior
             participantGenerations.computeIfAbsent(participantKey, k -> new AtomicLong(0)).incrementAndGet();
 
-            // 2. Si había una limpieza programada, se aborta de inmediato
+            // 2. Si había una limpieza programada en el scheduler, se aborta de inmediato
             ScheduledFuture<?> pendingTask = pendingCleanups.remove(participantKey);
             if (pendingTask != null) {
                 pendingTask.cancel(false);
@@ -80,9 +67,45 @@ public class WebSocketSessionRegistry {
     }
 
     /**
-     * Programa la limpieza con margen de espera. La decisión y el estado se toman bajo lock,
-     * pero la ejecución destructiva pesada (DB / STOMP) corre en el pool acotado fuera del monitor.
+     * Valida atómicamente si la generación de desconexión aún es válida y no hay sockets activos.
+     * Si sigue siendo válida, consume la generación definitivamente.
      */
+    public boolean validateAndConsumeGeneration(String inviteCode, UUID participantId, long expectedGeneration) {
+        String participantKey = inviteCode + ":" + participantId;
+        synchronized (lock) {
+            AtomicLong gen = participantGenerations.get(participantKey);
+            if (gen == null || gen.get() != expectedGeneration) {
+                return false;
+            }
+
+            boolean hasActiveSockets = sessions.values().stream()
+                    .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+
+            if (hasActiveSockets) {
+                return false;
+            }
+
+            // Consumir la generación atómicamente: la acción destructiva tiene luz verde definitiva
+            participantGenerations.remove(participantKey);
+            return true;
+        }
+    }
+
+    /**
+     * Consulta si la generación actual sigue intacta (para chequeos defensivos previos).
+     */
+    public boolean isGenerationActive(String inviteCode, UUID participantId, long expectedGeneration) {
+        String participantKey = inviteCode + ":" + participantId;
+        synchronized (lock) {
+            AtomicLong gen = participantGenerations.get(participantKey);
+            if (gen == null || gen.get() != expectedGeneration) {
+                return false;
+            }
+            return sessions.values().stream()
+                    .noneMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+        }
+    }
+
     public void scheduleCleanupIfLast(String wsSessionId, Consumer<SessionInfo> cleanupAction) {
         SessionInfo removedInfo;
         String participantKey;
@@ -96,7 +119,6 @@ public class WebSocketSessionRegistry {
             String inviteCode = removedInfo.inviteCode();
             participantKey = inviteCode + ":" + participantId;
 
-            // Verificamos si aún tiene otros sockets (otra pestaña abierta)
             boolean hasOthers = sessions.values().stream()
                     .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
 
@@ -105,7 +127,6 @@ public class WebSocketSessionRegistry {
                 return;
             }
 
-            // Marcamos una nueva generación esperada para este ciclo de desconexión
             expectedGeneration = participantGenerations
                     .computeIfAbsent(participantKey, k -> new AtomicLong(0))
                     .incrementAndGet();
@@ -115,9 +136,8 @@ public class WebSocketSessionRegistry {
 
             Instant executionTime = Instant.now().plusSeconds(GRACE_PERIOD_SECONDS);
             ScheduledFuture<?> task = scheduler.schedule(() -> {
-                boolean proceedWithCleanup = false;
-
-                // 1. Verificación preliminar al vencer el temporizador
+                // 1. Verificación preliminar al expirar el tiempo de gracia (SIN borrar la generación)
+                boolean stillValid;
                 synchronized (lock) {
                     pendingCleanups.remove(participantKey);
 
@@ -125,53 +145,37 @@ public class WebSocketSessionRegistry {
                             .getOrDefault(participantKey, new AtomicLong(-1))
                             .get();
 
-                    if (currentGeneration == expectedGeneration) {
-                        boolean reconnected = sessions.values().stream()
-                                .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+                    boolean hasSockets = sessions.values().stream()
+                            .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
 
-                        if (!reconnected) {
-                            proceedWithCleanup = true;
-                            // OJO: No removemos participantGenerations aquí para permitir
-                            // que si ocurre un register() mientras la tarea hace cola,
-                            // se incremente y se detecte en el worker.
-                        }
-                    } else {
-                        log.info("Limpieza descartada por generación obsoleta para participantId={}", participantId);
+                    stillValid = (currentGeneration == expectedGeneration && !hasSockets);
+                }
+
+                if (!stillValid) {
+                    log.info("Limpieza descartada por reconexión o generación obsoleta para participantId={}", participantId);
+                    return;
+                }
+
+                // 2. Encolar en el executor para no bloquear el scheduler
+                cleanupExecutor.submit(() -> {
+                    // 3. Revalidación atómica en el límite de la mutación destructiva
+                    // Si el usuario se reconectó mientras esperaba en la cola del pool,
+                    // validateAndConsumeGeneration devolverá false.
+                    boolean proceed = validateAndConsumeGeneration(inviteCode, participantId, expectedGeneration);
+
+                    if (!proceed) {
+                        log.info("Reconexión detectada justo antes de la mutación en DB para {}. Abortando limpieza.",
+                                removedInfo.username());
+                        return;
                     }
-                }
 
-                if (proceedWithCleanup) {
-                    cleanupExecutor.submit(() -> {
-                        boolean canExecuteDestructiveAction = false;
+                    try {
+                        cleanupAction.accept(removedInfo);
+                    } catch (Exception ex) {
+                        log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
+                    }
+                });
 
-                        // 2. Doble verificación inmediata antes de la mutación destructiva
-                        synchronized (lock) {
-                            long finalGeneration = participantGenerations
-                                    .getOrDefault(participantKey, new AtomicLong(-1))
-                                    .get();
-
-                            boolean hasActiveSockets = sessions.values().stream()
-                                    .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
-
-                            // Si nadie se reconectó en la cola del pool y sigue la misma generación
-                            if (finalGeneration == expectedGeneration && !hasActiveSockets) {
-                                canExecuteDestructiveAction = true;
-                                participantGenerations.remove(participantKey);
-                            } else {
-                                log.info("Reconexión detectada justo antes de ejecutar la limpieza para {}. Abortando.", removedInfo.username());
-                            }
-                        }
-
-                        // 3. Ejecución I/O pesada (DB, broadcast STOMP, etc.) fuera de todo lock
-                        if (canExecuteDestructiveAction) {
-                            try {
-                                cleanupAction.accept(removedInfo);
-                            } catch (Exception ex) {
-                                log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
-                            }
-                        }
-                    });
-                }
             }, executionTime);
 
             pendingCleanups.put(participantKey, task);
