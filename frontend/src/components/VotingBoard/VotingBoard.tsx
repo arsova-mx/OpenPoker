@@ -232,7 +232,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // Cambiar estado manual del ticket esperando siempre el reset REST para evitar carreras entre canales
+  // Cambiar estado manual del ticket esperando la confirmación de backend para evitar condiciones de carrera
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -240,17 +240,20 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
-      // Si se reactiva la votación, aseguramos primero la purga en BD vía REST
+      // Si se activa votación, delegamos completamente la purga y el cambio a VOTING al endpoint REST
       if (newStatus === "VOTING") {
         await resetVotes(ticketId);
         setSelectedCard(null);
         setVoteStatusMap({});
         setSessionVotesData(null);
+        await loadTickets();
+        return;
       }
 
+      // Para pausar (WAITING) o finalizar (FINISHED) se conserva el flujo REST habitual
       const updated = await ticketService.updateStatus(ticketId, newStatus);
 
-      if (newStatus === "VOTING" || activeTicket?.id === ticketId) {
+      if (activeTicket?.id === ticketId) {
         setActiveTicket(updated);
       }
       setTickets((prev) => prev.map((t) => (t.id === ticketId ? updated : t)));
@@ -345,7 +348,7 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Purga de BD vía REST asegurando consistencia transaccional
+  // Nueva Ronda: Petición REST atómica con difusión gestionada por backend
   const handleResetVotes = async () => {
     if (!activeTicket || !session || !code) return;
 
@@ -357,13 +360,7 @@ export default function VotingBoard() {
       setSelectedCard(null);
       setVoteStatusMap({});
       setSessionVotesData(null);
-
-      const resetTicket: TicketResponse = {
-        ...activeTicket,
-        status: "VOTING",
-      };
-      setActiveTicket(resetTicket);
-      setTickets((prev) => prev.map((t) => (t.id === activeTicket.id ? resetTicket : t)));
+      await loadTickets();
     } catch (error) {
       console.error("No se pudo reiniciar la ronda en el servidor:", error);
     }

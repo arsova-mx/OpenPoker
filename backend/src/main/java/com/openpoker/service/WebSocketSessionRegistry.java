@@ -42,10 +42,9 @@ public class WebSocketSessionRegistry {
         String participantKey = inviteCode + ":" + participantId;
 
         synchronized (lock) {
-            // 1. Invalidamos cualquier generación anterior
+            // Invalida cualquier generación previa incrementando la versión
             participantGenerations.computeIfAbsent(participantKey, k -> new AtomicLong(0)).incrementAndGet();
 
-            // 2. Si había una limpieza programada en el scheduler, se aborta de inmediato
             ScheduledFuture<?> pendingTask = pendingCleanups.remove(participantKey);
             if (pendingTask != null) {
                 pendingTask.cancel(false);
@@ -67,11 +66,12 @@ public class WebSocketSessionRegistry {
     }
 
     /**
-     * Valida atómicamente si la generación de desconexión aún es válida y no hay sockets activos.
-     * Si sigue siendo válida, consume la generación definitivamente.
+     * Ejecuta la mutación destructiva de forma atómica respecto al registro de nuevos sockets.
+     * Si ocurre una reconexión concurrente, cleanupAction no se ejecuta.
      */
-    public boolean validateAndConsumeGeneration(String inviteCode, UUID participantId, long expectedGeneration) {
+    public boolean executeIfStillDisconnected(String inviteCode, UUID participantId, long expectedGeneration, Consumer<SessionInfo> cleanupAction, SessionInfo info) {
         String participantKey = inviteCode + ":" + participantId;
+
         synchronized (lock) {
             AtomicLong gen = participantGenerations.get(participantKey);
             if (gen == null || gen.get() != expectedGeneration) {
@@ -79,30 +79,22 @@ public class WebSocketSessionRegistry {
             }
 
             boolean hasActiveSockets = sessions.values().stream()
-                    .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+                    .anyMatch(s -> inviteCode.equals(s.inviteCode()) && participantId.equals(s.participantId()));
 
             if (hasActiveSockets) {
                 return false;
             }
 
-            // Consumir la generación atómicamente: la acción destructiva tiene luz verde definitiva
-            participantGenerations.remove(participantKey);
-            return true;
-        }
-    }
-
-    /**
-     * Consulta si la generación actual sigue intacta (para chequeos defensivos previos).
-     */
-    public boolean isGenerationActive(String inviteCode, UUID participantId, long expectedGeneration) {
-        String participantKey = inviteCode + ":" + participantId;
-        synchronized (lock) {
-            AtomicLong gen = participantGenerations.get(participantKey);
-            if (gen == null || gen.get() != expectedGeneration) {
-                return false;
+            try {
+                // Se ejecuta la mutación antes de remover el estado
+                cleanupAction.accept(info);
+            } finally {
+                // Solo se limpia la entrada si la generación sigue siendo la esperada
+                if (gen.get() == expectedGeneration) {
+                    participantGenerations.remove(participantKey);
+                }
             }
-            return sessions.values().stream()
-                    .noneMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
+            return true;
         }
     }
 
@@ -136,43 +128,22 @@ public class WebSocketSessionRegistry {
 
             Instant executionTime = Instant.now().plusSeconds(GRACE_PERIOD_SECONDS);
             ScheduledFuture<?> task = scheduler.schedule(() -> {
-                // 1. Verificación preliminar al expirar el tiempo de gracia (SIN borrar la generación)
-                boolean stillValid;
                 synchronized (lock) {
                     pendingCleanups.remove(participantKey);
-
-                    long currentGeneration = participantGenerations
-                            .getOrDefault(participantKey, new AtomicLong(-1))
-                            .get();
-
-                    boolean hasSockets = sessions.values().stream()
-                            .anyMatch(info -> inviteCode.equals(info.inviteCode()) && participantId.equals(info.participantId()));
-
-                    stillValid = (currentGeneration == expectedGeneration && !hasSockets);
                 }
 
-                if (!stillValid) {
-                    log.info("Limpieza descartada por reconexión o generación obsoleta para participantId={}", participantId);
-                    return;
-                }
-
-                // 2. Encolar en el executor para no bloquear el scheduler
+                // Encolar al executor asíncrono
                 cleanupExecutor.submit(() -> {
-                    // 3. Revalidación atómica en el límite de la mutación destructiva
-                    // Si el usuario se reconectó mientras esperaba en la cola del pool,
-                    // validateAndConsumeGeneration devolverá false.
-                    boolean proceed = validateAndConsumeGeneration(inviteCode, participantId, expectedGeneration);
+                    boolean cleaned = executeIfStillDisconnected(
+                            inviteCode, 
+                            participantId, 
+                            expectedGeneration, 
+                            cleanupAction, 
+                            removedInfo
+                    );
 
-                    if (!proceed) {
-                        log.info("Reconexión detectada justo antes de la mutación en DB para {}. Abortando limpieza.",
-                                removedInfo.username());
-                        return;
-                    }
-
-                    try {
-                        cleanupAction.accept(removedInfo);
-                    } catch (Exception ex) {
-                        log.error("Error durante la ejecución de cleanupAction para {}", removedInfo.username(), ex);
+                    if (!cleaned) {
+                        log.info("Reconexión detectada en el límite de mutación para {}. Limpieza abortada.", removedInfo.username());
                     }
                 });
 
