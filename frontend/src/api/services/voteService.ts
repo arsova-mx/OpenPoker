@@ -27,4 +27,12 @@ export const voteService = {
     );
     return response.data;
   },
+
+  resetVotes: async (code: string, ticketId: string): Promise<void> => {
+    await instance.post(
+      `/sessions/${code}/votes/reset`,
+      null,
+      { params: { ticketId } }
+    );
+  },
 };

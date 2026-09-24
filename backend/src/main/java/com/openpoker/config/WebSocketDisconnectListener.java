@@ -28,54 +28,56 @@ public class WebSocketDisconnectListener {
     private final SimpMessagingTemplate messagingTemplate;
 
     @EventListener
-    public void handleDisconnect(SessionDisconnectEvent event) {
-        String wsSessionId = event.getSessionId();
+public void handleDisconnect(SessionDisconnectEvent event) {
+    String wsSessionId = event.getSessionId();
 
-        // Ejecuta atómicamente la validación y solo llama a la limpieza si realmente era el último socket
-        registry.unregisterAndCleanupIfLast(wsSessionId, info -> {
-            log.info("WebSocket disconnected (última conexión): participant={}, inviteCode={}, reason={}", 
-                    info.username(), info.inviteCode(), event.getCloseStatus());
+    // Programa la limpieza tolerante a reconexiones rápidas
+    registry.scheduleCleanupIfLast(wsSessionId, info -> {
+        log.info("Ejecutando limpieza final de sesión: participant={}, inviteCode={}", 
+                info.username(), info.inviteCode());
 
+        try {
+            UUID sessionId = info.sessionId();
+
+            // 1. Borrado físico tras expirar el margen de gracia
+            gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
+
+            // 2. Notificación a los participantes restantes
             try {
-                UUID sessionId = info.sessionId();
+                SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
 
-                // 1. Ejecutamos la desconexión física de la base de datos
-                gameSessionService.handleDisconnect(info.participantId(), info.inviteCode());
+                List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode())
+                    .stream()
+                    .map(p -> new WebSocketParticipantResponse(
+                            p.getId(),
+                            p.getEffectiveName(),
+                            p.getRole() != null ? p.getRole().name() : "",
+                            p.getUser() == null
+                    ))
+                    .toList();
 
-                // 2. Notificamos a los clientes restantes
-                try {
-                    SessionResponse currentSession = gameSessionService.getSessionByCode(info.inviteCode());
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", currentSession);
+                
+                UUID activeTicketId = null;
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/vote-status", 
+                    voteService.getVoteStatus(sessionId, activeTicketId));
 
-                    List<WebSocketParticipantResponse> participants = gameSessionService.getParticipants(info.inviteCode())
-                        .stream()
-                        .map(p -> new WebSocketParticipantResponse(
-                                p.getId(),
-                                p.getEffectiveName(),
-                                p.getRole() != null ? p.getRole().name() : "",
-                                p.getUser() == null
-                        ))
-                        .toList();
-
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", participants);
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", currentSession);
-                    
-                    UUID activeTicketId = null;
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/vote-status", 
-                        voteService.getVoteStatus(sessionId, activeTicketId));
-
-                } catch (SessionNotFoundException ex) {
-                    // CASO HOST DESCONECTADO: Sala eliminada
-                    log.info("La sesión {} fue eliminada por desconexión del HOST. Notificando cierre...", info.inviteCode());
-                    
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", List.of());
-                    messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", 
-                        (Object) Map.of("status", "FINISHED", "message", "El Host ha cerrado la sesión"));
-                }
-
-            } catch (Exception e) {
-                log.warn("Error cleaning up after disconnect: participantId={}, error={}",
-                        info.participantId(), e.getMessage());
+            } catch (SessionNotFoundException ex) {
+                // Caso Host desconectado definitivamente
+                log.info("La sesión {} fue eliminada por desconexión del HOST tras expiración del grace period.", info.inviteCode());
+                
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/participants", List.of());
+                messagingTemplate.convertAndSend("/topic/session/" + info.inviteCode() + "/state", 
+                    (Object) Map.of("status", "FINISHED", "message", "El Host ha cerrado la sesión"));
             }
-        });
-    }
+
+        } catch (Exception e) {
+            log.warn("Error cleaning up after disconnect: participantId={}, error={}",
+                    info.participantId(), e.getMessage());
+        }
+    });
+}
+
+
 }

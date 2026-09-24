@@ -89,3 +89,40 @@ export interface Participant {
   role?: "HOST" | "VOTER";
   isGuest?: boolean;
 }
+
+// --- Issue: Votación en tiempo real y componentes modulares ---
+
+// Estado de quién ha votado (compatible con el issue y el backend Map<UUID, Boolean>)
+export interface VoteStatus {
+  participantId: string;
+  hasVoted: boolean;
+}
+export type VoteStatusMap = Record<string, boolean>;
+
+// Voto individual (compatible con tu VoteResponse)
+export interface Vote {
+  participantId?: string;
+  username: string;
+  value: string;
+  votedAt?: string;
+}
+
+// Estadísticas recibidas tras el reveal
+export interface VoteStatistics {
+  average: number;
+  consensusPercentage: number;
+  isFullConsensus: boolean;
+  outlierVoteIds?: string[];
+}
+
+export interface VotingRRAverageResponse {
+  sessionCode: string;
+  votes: VoteResponse[];
+  revealed: boolean;
+  suggestedAverage?: number;
+  suggestedCardValue?: string;
+  statistics?: VoteStatistics;
+}
+
+// Tipo Deck para CardSelector
+export type CardDeck = string[];
