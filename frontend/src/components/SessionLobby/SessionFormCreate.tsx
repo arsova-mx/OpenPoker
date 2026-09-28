@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { sessionServices } from "@/api/services/sessionServices";
+import { SeriesSelector } from "@/components/SeriesSelector/SeriesSelector"; // O "@/components/SeriesSelector" si no usaste subcarpeta
+import type { CardDeck } from "@/types";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
@@ -9,6 +11,7 @@ export default function SessionFormCreate() {
   const navigate = useNavigate();
 
   const [sessionName, setSessionName] = useState("");
+  const [selectedDeck, setSelectedDeck] = useState<CardDeck | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -25,21 +28,24 @@ export default function SessionFormCreate() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const response = await sessionServices.createSession({
-        name: sessionName.trim(),
-      });
+      // 2. Enviamos el deckId seleccionado hacia el backend (si es undefined, usará el deck por defecto)
+      const response = await sessionServices.createSession(
+        {
+          name: sessionName.trim(),
+        },
+        selectedDeck?.id
+      );
 
       navigate(`/session/${response.sessionCode}`);
     } catch {
-      // 2. El interceptor de APIClient ya dispara el toast global.
-      // No se setea errorMessage aquí para evitar duplicar el aviso en pantalla.
+      // 3. El interceptor de APIClient ya dispara el toast global.
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleCreate} className="space-y-4">
+    <form onSubmit={handleCreate} className="space-y-5">
       <div className="space-y-1">
         <label
           htmlFor="session-name-input"
@@ -72,10 +78,16 @@ export default function SessionFormCreate() {
         )}
       </div>
 
+      {/* Selector de series obtenido desde la base de datos */}
+      <SeriesSelector
+        selectedDeckId={selectedDeck?.id}
+        onSelectDeck={setSelectedDeck}
+        disabled={isLoading}
+      />
+
       <Button type="submit" disabled={isLoading} className="w-full">
         {isLoading ? "Creando sala..." : "Crear sala"}
       </Button>
     </form>
   );
 }
-

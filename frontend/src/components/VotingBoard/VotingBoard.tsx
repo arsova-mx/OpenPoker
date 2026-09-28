@@ -8,7 +8,7 @@ import { useStompClient } from "@/hooks/useStompClient";
 import useAuthStore from "@/store/authStore";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import CardSelector from "../CardSelector/CardSelector";
+import CardHand from "../CardHand/CardHand";
 import VoteBoard from "../VoteBoard/VoteBoard";
 import RevealPanel from "../RevealPanel/RevealPanel";
 import type { 
@@ -86,19 +86,27 @@ export default function VotingBoard() {
     setVoteStatusMap(newMap);
   }, [votes, wsConnected]);
 
-  // Cargar sesión y baraja inicial
+  // Cargar sesión y baraja dinámica según la serie de la sala
   useEffect(() => {
     if (!code) return;
-    sessionServices.getSession(code).then((data) => setSession(data));
 
-    cardDeckService
-      .getDeckBySeries("FIBONACCI")
+    sessionServices
+      .getSession(code)
+      .then((sessionData) => {
+        setSession(sessionData);
+
+        // Usar la serie que el creador definió para la sesión (o FIBONACCI por defecto)
+        const seriesToLoad = sessionData.seriesType || "FIBONACCI";
+        return cardDeckService.getDeckBySeries(seriesToLoad);
+      })
       .then((deck) => {
         if (deck?.cards) {
           setDeckCards(deck.cards);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error("Error al cargar la sesión o su baraja:", err);
+      });
   }, [code]);
 
   // Suscripciones STOMP y Join seguro
@@ -232,7 +240,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // Cambiar estado manual del ticket esperando la confirmación de backend para evitar condiciones de carrera
+  // Cambiar estado manual del ticket
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -240,7 +248,6 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
-      // Si se activa votación, delegamos completamente la purga y el cambio a VOTING al endpoint REST
       if (newStatus === "VOTING") {
         await resetVotes(ticketId);
         setSelectedCard(null);
@@ -250,7 +257,6 @@ export default function VotingBoard() {
         return;
       }
 
-      // Para pausar (WAITING) o finalizar (FINISHED) se conserva el flujo REST habitual
       const updated = await ticketService.updateStatus(ticketId, newStatus);
 
       if (activeTicket?.id === ticketId) {
@@ -330,7 +336,7 @@ export default function VotingBoard() {
     }
   };
 
-  // Revelar: WebSocket con fallback a REST
+  // Revelar
   const handleRevealVotes = async () => {
     if (!activeTicket || isRevealing) return;
     setIsRevealing(true);
@@ -348,7 +354,7 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda: Petición REST atómica con difusión gestionada por backend
+  // Nueva Ronda
   const handleResetVotes = async () => {
     if (!activeTicket || !session || !code) return;
 
@@ -636,15 +642,27 @@ export default function VotingBoard() {
             currentUsername={currentUsername}
           />
 
-          {/* Selector de baraja */}
-          <CardSelector
-            cards={deckCards}
-            selectedCardId={selectedCard}
-            onSelectCard={setSelectedCard}
-            onSubmitVote={handleSubmitVote}
-            disabled={votingLoading || isRevealed || activeTicket.status !== "VOTING"}
-            loading={votingLoading}
-          />
+          {/* Selector de baraja usando CardHand con soporte dinámico */}
+          <div className="w-full max-w-4xl flex flex-col items-center gap-4">
+            <CardHand
+              values={deckCards}
+              selectedValue={selectedCard}
+              seriesType={session?.seriesType || "FIBONACCI"}
+              disabled={votingLoading || isRevealed || activeTicket.status !== "VOTING"}
+              onSelectCard={(_value, id) => {
+                setSelectedCard(id || _value);
+              }}
+            />
+
+            <Button
+              onClick={handleSubmitVote}
+              disabled={!selectedCard || votingLoading || isRevealed || activeTicket.status !== "VOTING"}
+              size="lg"
+              className="w-full sm:w-64"
+            >
+              {votingLoading ? "Enviando voto..." : "Enviar voto"}
+            </Button>
+          </div>
         </>
       ) : (
         <section className="text-center my-12 text-muted-foreground">
