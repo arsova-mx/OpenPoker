@@ -24,7 +24,7 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
       setDecks(availableDecks);
       setLoading(false);
 
-      // Si no hay ninguno seleccionado previamente, seleccionar Fibonacci por defecto
+      // Solo autoseleccionar si hay decks reales devueltos por el backend
       if (!selectedDeckId && availableDecks.length > 0) {
         const defaultDeck =
           availableDecks.find((d) => d.seriesType === "FIBONACCI") || availableDecks[0];
@@ -45,6 +45,11 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
     );
   }
 
+  // Si falló el backend o no devolvió decks, no renderizar tarjetas inválidas
+  if (decks.length === 0) {
+    return null;
+  }
+
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground block">
@@ -56,27 +61,23 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
           const isSelected = selectedDeckId === deck.id;
 
           return (
-            <div
+            <button
               key={deck.id}
-              role="button"
-              tabIndex={0}
+              type="button"
+              disabled={disabled}
               aria-pressed={isSelected}
-              onClick={() => !disabled && onSelectDeck(deck)}
-              onKeyDown={(e) => {
-                if (!disabled && (e.key === "Enter" || e.key === " ")) {
-                  e.preventDefault();
-                  onSelectDeck(deck);
-                }
-              }}
+              onClick={() => onSelectDeck(deck)}
               className={`p-3.5 rounded-xl border text-left transition-all duration-150 flex flex-col justify-between select-none ${
-                disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                disabled
+                  ? "opacity-50 cursor-not-allowed pointer-events-none"
+                  : "cursor-pointer"
               } ${
                 isSelected
                   ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/40"
                   : "border-border bg-card hover:border-primary/50 hover:bg-accent/40"
               }`}
             >
-              <div>
+              <div className="w-full">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-semibold text-sm text-foreground">
                     {deck.name}
@@ -92,7 +93,7 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
               </div>
 
               {/* Preview de las primeras cartas */}
-              <div className="flex flex-wrap gap-1 mt-3 pt-2 border-t border-border/50">
+              <div className="flex flex-wrap gap-1 mt-3 pt-2 border-t border-border/50 w-full">
                 {deck.values.slice(0, 7).map((val, idx) => (
                   <span
                     key={`${deck.id}-preview-${idx}`}
@@ -107,7 +108,7 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
                   </span>
                 )}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

@@ -57,7 +57,7 @@ public class GameSession {
     @Column(nullable = false)
     private boolean votesRevealed = false;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "deck_id")
     private VotingDeck deck;
 }
