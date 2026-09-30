@@ -87,4 +87,36 @@ class VoteStatisticsServiceTest {
         assertFalse(stats.isFullConsensus());
         assertTrue(stats.outlierVoteIds().isEmpty());
     }
+
+    @Test
+    @DisplayName("La carta 0 cuenta en el promedio y los comodines (sin weight) se excluyen")
+    void shouldCountZeroAndIgnoreWildcards() {
+        // Given: 0, 2 y un comodín "?" (sin weight)
+        Vote wildcard = new Vote();
+        wildcard.setId(UUID.randomUUID());
+        wildcard.setCardValue(new CardValue());
+
+        List<Vote> votes = List.of(createVote(0), createVote(2), wildcard);
+
+        // When
+        VoteStatisticsDTO stats = voteStatisticsService.calculateStatistics(votes);
+
+        // Then: el promedio se calcula solo con 0 y 2
+        assertEquals(1.0, stats.average(), 0.001);
+        assertEquals(50.0, stats.consensusPercentage(), 0.001);
+        assertFalse(stats.isFullConsensus());
+    }
+
+    @Test
+    @DisplayName("Si solo hay comodines no hay estadísticas")
+    void shouldReturnDefaultsWhenOnlyWildcards() {
+        Vote wildcard = new Vote();
+        wildcard.setId(UUID.randomUUID());
+        wildcard.setCardValue(new CardValue());
+
+        VoteStatisticsDTO stats = voteStatisticsService.calculateStatistics(List.of(wildcard));
+
+        assertEquals(0.0, stats.average());
+        assertFalse(stats.isFullConsensus());
+    }
 }

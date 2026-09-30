@@ -207,7 +207,9 @@ public class VoteService {
 
         // 3. Buscar carta sugerida de forma portable usando el ID real obtenido de la base de datos
         CardValue suggested = null;
-        if (activeDeck != null && statistics.average() > 0) {
+        boolean hasNumericVotes = votes.stream()
+                .anyMatch(v -> v.getCardValue() != null && v.getCardValue().getWeight() != null);
+        if (activeDeck != null && hasNumericVotes) {
             suggested = cardValueRepository.findClosestByWeight(
                 activeDeck.getId().toString(), 
                 statistics.average()
