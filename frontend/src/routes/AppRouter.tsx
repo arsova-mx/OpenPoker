@@ -8,6 +8,7 @@ import { Home } from "../pages/Home";
 import SessionLobby from "../components/SessionLobby/SessionLobby";
 import ProtectedRoute from "./ProtectedRoute"; // <-- Importar el wrapper
 import VotingBoard from "../components/VotingBoard/VotingBoard";
+import NotFound from "../pages/NotFound";
 
 function redirectAuthenticated() {
   const token = getAuthToken();
@@ -51,6 +52,10 @@ export const router = createBrowserRouter([
         ],
       },
       ...authRoutes,
+      {
+        path: "*",
+        element: <NotFound />,
+      },
     ],
   },
 ]);

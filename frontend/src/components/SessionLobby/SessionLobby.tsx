@@ -1,27 +1,12 @@
-import { useNavigate } from "react-router-dom";
 import useAuthStore from "@/store/authStore";
-import { authService } from "@/api/services/authService";
+import { useLogout } from "@/hooks/useLogout";
 import SessionFormCreate from "./SessionFormCreate";
 import SessionFormJoin from "./SessionFormJoin";
 import { Button } from "../ui/button";
 
 export default function SessionLobby() {
-  const navigate = useNavigate();
-  
-  // 1. Obtenemos el username y la acción de logout del store
   const username = useAuthStore((state) => state.username);
-  const logout = useAuthStore((state) => state.logout);
-
-  const handleLogout = () => {
-    // 2. Limpia los tokens guardados manualmente (token, tokenDuration)
-    authService.logout();
-
-    // 3. Limpia el store en memoria y actualiza localStorage('auth') a través del middleware de Zustand
-    logout();
-
-    // 4. Redirige a la ruta real de login
-    navigate("/auth/login", { replace: true });
-  };
+  const handleLogout = useLogout();
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

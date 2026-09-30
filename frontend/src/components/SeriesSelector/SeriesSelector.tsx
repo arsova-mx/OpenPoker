@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { CardDeck } from "@/types";
 import { cardDeckService } from "@/api/services/cardDeckService";
 
@@ -16,6 +16,15 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
   const [decks, setDecks] = useState<CardDeck[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Los decks se cargan una sola vez; los refs dan acceso a los props más recientes
+  // sin volver a disparar la carga cuando el padre re-renderiza.
+  const onSelectDeckRef = useRef(onSelectDeck);
+  const selectedDeckIdRef = useRef(selectedDeckId);
+  useEffect(() => {
+    onSelectDeckRef.current = onSelectDeck;
+    selectedDeckIdRef.current = selectedDeckId;
+  });
+
   useEffect(() => {
     let isMounted = true;
 
@@ -25,10 +34,10 @@ export const SeriesSelector: React.FC<SeriesSelectorProps> = ({
       setLoading(false);
 
       // Solo autoseleccionar si hay decks reales devueltos por el backend
-      if (!selectedDeckId && availableDecks.length > 0) {
+      if (!selectedDeckIdRef.current && availableDecks.length > 0) {
         const defaultDeck =
           availableDecks.find((d) => d.seriesType === "FIBONACCI") || availableDecks[0];
-        onSelectDeck(defaultDeck);
+        onSelectDeckRef.current(defaultDeck);
       }
     });
 
