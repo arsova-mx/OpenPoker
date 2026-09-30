@@ -65,6 +65,12 @@ public class WebSocketSessionRegistry {
         return Optional.ofNullable(sessions.get(wsSessionId));
     }
 
+    /** Indica si esta conexión WebSocket ya hizo join a la sala indicada. */
+    public boolean isJoined(String wsSessionId, String inviteCode) {
+        return wsSessionId != null && inviteCode != null
+                && get(wsSessionId).map(info -> inviteCode.equals(info.inviteCode())).orElse(false);
+    }
+
     /**
      * Ejecuta la mutación destructiva de forma atómica respecto al registro de nuevos sockets.
      * Si ocurre una reconexión concurrente, cleanupAction no se ejecuta.

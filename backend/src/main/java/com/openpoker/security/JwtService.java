@@ -12,6 +12,7 @@ import com.openpoker.globalexception.InvalidTokenException;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
@@ -109,6 +110,16 @@ public class JwtService {
         } catch (IllegalArgumentException | NullPointerException e){
             throw new InvalidTokenException("Token invalido o mal estructurado");
         }
+    }
+
+    public Instant extractExpiration(String token) {
+        Date expirationDate = Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+        return expirationDate == null ? null : expirationDate.toInstant();
     }
 
     public boolean validateToken(String token) {

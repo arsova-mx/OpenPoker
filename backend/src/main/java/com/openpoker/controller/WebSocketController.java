@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.RestController;
@@ -106,8 +107,7 @@ public class WebSocketController {
             }
 
         } catch (RuntimeException ex) {
-            log.error("Error en WebSocket join", ex);
-            publishError(inviteCode, "session.join", ex);
+            publishError(headerAccessor, "session.join", ex);
         }
     }
 
@@ -129,7 +129,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.leave", ex);
+            publishError(headerAccessor, "session.leave", ex);
         }
     }
 
@@ -159,8 +159,7 @@ public class WebSocketController {
         } catch (DataIntegrityViolationException ex) {
             log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
         } catch (RuntimeException ex) {
-            log.error("💥 ERROR CRÍTICO AL VOTAR EN SALA [{}]:", inviteCode, ex);
-            publishError(inviteCode, "session.vote", ex);
+            publishError(headerAccessor, "session.vote", ex);
         }
     }
 
@@ -185,7 +184,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.reveal", ex);
+            publishError(headerAccessor, "session.reveal", ex);
         }
     }
 
@@ -237,8 +236,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
 
         } catch (RuntimeException ex) {
-            log.error("Error en session.reset-votes para sala: {}", inviteCode, ex);
-            publishError(inviteCode, "session.reset-votes", ex);
+            publishError(headerAccessor, "session.reset-votes", ex);
         }
     }
 
@@ -262,7 +260,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/ticket-updated", ticketResponse);
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "ticket.finish", ex);
+            publishError(headerAccessor, "ticket.finish", ex);
         }
     }
 
@@ -301,18 +299,63 @@ public class WebSocketController {
         return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
-    private void publishError(String inviteCode, String action, RuntimeException ex) {
-        if (inviteCode == null || inviteCode.isBlank()) {
+    /**
+     * Envía el error solo a la conexión que lo provocó (cola privada /user/queue/errors).
+     * Antes se difundía a toda la sala con el nombre de la clase y el mensaje interno de la excepción.
+     * Los errores de dominio conservan su mensaje (pensado para el usuario); el resto se reemplaza
+     * por un mensaje genérico y se registra en el log con su stack trace.
+     */
+    private void publishError(SimpMessageHeaderAccessor headerAccessor, String action, RuntimeException ex) {
+        String wsSessionId = headerAccessor.getSessionId();
+        boolean expected = isExpectedError(ex);
+
+        if (expected) {
+            log.warn("WebSocket {} rechazado: {}", action, ex.getMessage());
+        } else {
+            log.error("Error inesperado en WebSocket {}", action, ex);
+        }
+
+        if (wsSessionId == null) {
             return;
         }
 
-        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        String message = expected && ex.getMessage() != null
+                ? ex.getMessage()
+                : "No se pudo completar la acción. Intenta de nuevo.";
 
-        messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) Map.of(
+        SimpMessageHeaderAccessor errorHeaders = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        errorHeaders.setSessionId(wsSessionId);
+        errorHeaders.setLeaveMutable(true);
+
+        messagingTemplate.convertAndSendToUser(wsSessionId, "/queue/errors", (Object) Map.of(
                 "action", action,
-                "type", ex.getClass().getSimpleName(),
+                "code", errorCode(ex, expected),
                 "message", message
-        ));
+        ), errorHeaders.getMessageHeaders());
+    }
+
+    private static boolean isExpectedError(RuntimeException ex) {
+        return ex.getClass().getPackageName().equals("com.openpoker.globalexception")
+                || ex instanceof IllegalArgumentException
+                || ex instanceof IllegalStateException
+                || ex instanceof UsernameNotFoundException;
+    }
+
+    private static String errorCode(RuntimeException ex, boolean expected) {
+        if (!expected) {
+            return "INTERNAL_ERROR";
+        }
+        String name = ex.getClass().getSimpleName();
+        if (name.contains("NotFound")) {
+            return "NOT_FOUND";
+        }
+        if (name.contains("Role") || name.contains("OnlyHost") || name.contains("IsNotParticipant")) {
+            return "FORBIDDEN";
+        }
+        if (name.contains("NotInVoting") || name.contains("AlreadyIn")) {
+            return "CONFLICT";
+        }
+        return "BAD_REQUEST";
     }
 
     @MessageMapping("/session.set-timer")
@@ -343,7 +386,7 @@ public class WebSocketController {
             );
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.set-timer", ex);
+            publishError(headerAccessor, "session.set-timer", ex);
         }
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, type FormEvent, type MouseEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { sessionServices } from "@/api/services/sessionServices";
 import { ticketService, type TicketResponse, type TicketStatus } from "@/api/services/ticketService";
 import { cardDeckService } from "@/api/services/cardDeckService";
@@ -40,6 +41,7 @@ export default function VotingBoard() {
 
   // Estados de sesión, baraja y tickets
   const [session, setSession] = useState<SessionResponse | null>(null);
+  const [isJoined, setIsJoined] = useState(false);
   const [deckCards, setDeckCards] = useState<CardValueResponse[]>([]);
   const [tickets, setTickets] = useState<TicketResponse[]>([]);
   const [activeTicket, setActiveTicket] = useState<TicketResponse | null>(null);
@@ -86,14 +88,18 @@ export default function VotingBoard() {
     setVoteStatusMap(newMap);
   }, [votes, wsConnected]);
 
-  // Cargar sesión y baraja dinámica según la serie de la sala
+  // Unirse a la sala (idempotente) y cargar la baraja según su serie.
+  // El backend solo acepta suscripciones STOMP de participantes, así que el join REST va primero:
+  // cubre también a quien entra por un enlace directo sin pasar por el lobby.
   useEffect(() => {
     if (!code) return;
 
-    sessionServices
-      .getSession(code)
+    const loadSession = isGuest ? sessionServices.getSession(code) : sessionServices.joinSession(code);
+
+    loadSession
       .then((sessionData) => {
         setSession(sessionData);
+        setIsJoined(true);
 
         // Usar la serie que el creador definió para la sesión (o FIBONACCI por defecto)
         const seriesToLoad = sessionData.seriesType || "FIBONACCI";
@@ -107,11 +113,29 @@ export default function VotingBoard() {
       .catch((err) => {
         console.error("Error al cargar la sesión o su baraja:", err);
       });
-  }, [code]);
+  }, [code, isGuest]);
+
+  // Errores de acciones por WebSocket: llegan solo a esta conexión
+  useEffect(() => {
+    if (!wsConnected) return;
+
+    const subErrors = subscribe<{ action?: string; code?: string; message?: string }>(
+      "/user/queue/errors",
+      (error) => {
+        toast.error("No se pudo completar la acción", {
+          description: error?.message ?? "Intenta de nuevo.",
+        });
+      }
+    );
+
+    return () => {
+      subErrors?.unsubscribe();
+    };
+  }, [wsConnected, subscribe]);
 
   // Suscripciones STOMP y Join seguro
   useEffect(() => {
-    if (!wsConnected || !code || !currentUsername) return;
+    if (!wsConnected || !code || !currentUsername || !isJoined) return;
 
     // 1. Suscripción a Participantes
     const subParticipants = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
@@ -208,7 +232,7 @@ export default function VotingBoard() {
       subVotes?.unsubscribe();
       subTicketUpdated?.unsubscribe();
     };
-  }, [wsConnected, code, currentUsername, isGuest, publish, subscribe, setSelectedCard, activeTicket]);
+  }, [wsConnected, code, currentUsername, isGuest, isJoined, publish, subscribe, setSelectedCard, activeTicket]);
 
   // Limpiar estados de votación cuando cambia el ticket activo
   useEffect(() => {
