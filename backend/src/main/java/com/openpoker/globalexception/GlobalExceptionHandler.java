@@ -88,6 +88,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", message, "errors", errors));
     }
 
+    @ExceptionHandler(GuestNameUnavailableException.class)
+    public ResponseEntity<?> handleGuestNameUnavailableException(GuestNameUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+    }
+
     @ExceptionHandler(TicketNotFoundException.class)
     public ResponseEntity<?> handleTicketNotFoundException(TicketNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());

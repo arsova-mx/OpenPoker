@@ -214,13 +214,9 @@ export default function VotingBoard() {
       }
     );
 
-    // 5. Emitir Join seguro
+    // 5. Emitir Join seguro. La identidad sale del token del CONNECT (usuario o invitado),
+    // nunca de un nombre enviado en el payload.
     const joinPayload: Record<string, string> = { inviteCode: code };
-    if (isGuest) {
-      joinPayload.guestName = currentUsername;
-    } else {
-      joinPayload.username = currentUsername;
-    }
     if (activeTicket?.id) {
       joinPayload.ticketId = activeTicket.id;
     }

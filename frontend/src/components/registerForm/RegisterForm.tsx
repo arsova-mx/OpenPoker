@@ -16,7 +16,9 @@ const registerSchema = z.object({
         username: z
             .string()
             .trim()
-            .min(1, "Ingrese un nombre de usuario"),
+            .min(1, "Ingrese un nombre de usuario")
+            // Misma regla que el backend (RegisterRequest)
+            .regex(/^[A-Za-z0-9._-]{3,30}$/, "De 3 a 30 caracteres: letras, números, punto, guion o guion bajo"),
         email: z
             .string()
             .trim()

@@ -17,13 +17,15 @@ import java.security.Principal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Autenticación y autorización de los frames STOMP entrantes.
  *
- * - CONNECT: valida el JWT (opcional: sin token la conexión es anónima) y guarda su expiración.
+ * - CONNECT: valida el JWT de usuario o el token de invitado (opcional: sin token la conexión es
+ *   anónima) y guarda su expiración. Un invitado queda limitado a la sala de su token.
  * - SEND: los clientes solo pueden publicar en /app/**. Publicar directo en /topic/** permitiría
  *   falsificar eventos de una sala (reveals, estado, timer) que reciben todos sus participantes.
  * - SUBSCRIBE: /topic/session/{code}/** solo para quien participa en esa sala;
@@ -37,6 +39,9 @@ import java.util.regex.Pattern;
 public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
     static final String TOKEN_EXPIRES_AT = "openpoker.tokenExpiresAt";
+    /** Atributos de la conexión de un invitado autenticado con su token (ver POST /api/sessions/{code}/guests). */
+    public static final String GUEST_PARTICIPANT_ID = "openpoker.guestParticipantId";
+    public static final String GUEST_SESSION_CODE = "openpoker.guestSessionCode";
 
     private static final String BEARER_PREFIX = "Bearer ";
     private static final Pattern SESSION_TOPIC = Pattern.compile("^/topic/session/([^/]+)/.+$");
@@ -77,14 +82,28 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
         }
 
         String token = authHeader.substring(BEARER_PREFIX.length()).trim();
-        if (!jwtService.validateToken(token)) {
-            // Si mandó un token pero es inválido o expiró, se rechaza la conexión
-            throw new AccessDeniedException("Token inválido o expirado");
+
+        if (jwtService.validateToken(token)) {
+            String username = jwtService.extractUsername(token);
+            accessor.setUser(new UsernamePasswordAuthenticationToken(username, null, List.of()));
+            rememberExpiration(accessor, jwtService.extractExpiration(token));
+            return;
         }
 
-        String username = jwtService.extractUsername(token);
-        accessor.setUser(new UsernamePasswordAuthenticationToken(username, null, List.of()));
-        rememberExpiration(accessor, jwtService.extractExpiration(token));
+        // Token de invitado: identifica a un participante invitado dentro de una sola sala
+        Optional<JwtService.GuestClaims> guest = jwtService.parseGuestToken(token);
+        if (guest.isPresent()) {
+            Map<String, Object> attributes = accessor.getSessionAttributes();
+            if (attributes != null) {
+                attributes.put(GUEST_PARTICIPANT_ID, guest.get().participantId());
+                attributes.put(GUEST_SESSION_CODE, guest.get().sessionCode());
+            }
+            rememberExpiration(accessor, guest.get().expiresAt());
+            return;
+        }
+
+        // Si mandó un token pero es inválido o expiró, se rechaza la conexión
+        throw new AccessDeniedException("Token inválido o expirado");
     }
 
     private void authorizeSend(String destination) {
@@ -112,6 +131,11 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
         String sessionCode = matcher.group(1);
         if (sessionRegistry.isJoined(accessor.getSessionId(), sessionCode)) {
+            return;
+        }
+
+        Map<String, Object> attributes = accessor.getSessionAttributes();
+        if (attributes != null && sessionCode.equals(attributes.get(GUEST_SESSION_CODE))) {
             return;
         }
 

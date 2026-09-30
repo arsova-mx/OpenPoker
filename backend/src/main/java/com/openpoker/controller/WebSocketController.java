@@ -6,13 +6,16 @@ import com.openpoker.dto.TicketResponseDTO;
 import com.openpoker.dto.TimerStatusDTO;
 import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.WebSocketParticipantResponse;
+import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.security.StompAuthChannelInterceptor;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.TicketService;
 import com.openpoker.service.TicketTimerService;
@@ -52,7 +55,6 @@ public class WebSocketController {
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
-        String guestName = payload.get("guestName");
         UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
         try {
             String username = resolveUsernameOrNull(headerAccessor);
@@ -73,18 +75,10 @@ public class WebSocketController {
                     service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
-            } else if (guestName != null && !guestName.isBlank()) {
-                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName);
-
-                if (existingGuest.isPresent()) {
-                    participant = existingGuest.get();
-                } else {
-                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, guestName);
-                    service.joinSession(joinRequest);
-                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName).orElseThrow();
-                }
             } else {
-                throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
+                // Invitado: se identifica por el token emitido en POST /api/sessions/{code}/guests,
+                // nunca por el nombre (antes cualquiera con el nombre de un invitado tomaba su lugar).
+                participant = resolveGuestParticipant(headerAccessor, session);
             }
 
             sessionRegistry.register(
@@ -262,6 +256,25 @@ public class WebSocketController {
         } catch (RuntimeException ex) {
             publishError(headerAccessor, "ticket.finish", ex);
         }
+    }
+
+    private Participant resolveGuestParticipant(SimpMessageHeaderAccessor headerAccessor, GameSession session) {
+        Map<String, Object> attributes = headerAccessor.getSessionAttributes();
+        Object guestParticipantId = attributes == null ? null : attributes.get(StompAuthChannelInterceptor.GUEST_PARTICIPANT_ID);
+        Object guestSessionCode = attributes == null ? null : attributes.get(StompAuthChannelInterceptor.GUEST_SESSION_CODE);
+
+        if (!(guestParticipantId instanceof UUID participantId) || !session.getSessionCode().equals(guestSessionCode)) {
+            throw new IllegalArgumentException(
+                    "Para entrar como invitado primero solicita un token en POST /api/sessions/{code}/guests.");
+        }
+
+        Participant participant = participantRepository.findById(participantId)
+                .orElseThrow(() -> new ParticipantNotFoundException("El invitado ya no existe en esta sala; vuelve a unirte."));
+
+        if (participant.getUser() != null || !participant.getGameSession().getId().equals(session.getId())) {
+            throw new IllegalArgumentException("El token de invitado no corresponde a esta sala.");
+        }
+        return participant;
     }
 
     private List<WebSocketParticipantResponse> mapParticipants(List<Participant> participants) {
