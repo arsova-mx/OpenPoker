@@ -9,8 +9,8 @@ function sanitizeStompLog(message: string): string {
 }
 
 function getBrokerURL(): string {
-  // Si tienes definida una URL base de API en Vite (ej: VITE_API_BASE_URL="http://localhost:8080/api")
-  const apiUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL;
+  // Misma variable que el cliente REST: si VITE_API_URL apunta a otro host, el WebSocket usa ese host
+  const apiUrl = import.meta.env.VITE_API_URL;
   
   if (apiUrl) {
     try {
