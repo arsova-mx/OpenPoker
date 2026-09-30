@@ -42,8 +42,7 @@ cp .env.example .env
 Edit `.env` and set at least these values:
 
 ```bash
-MYSQL_PASSWORD=<a strong password>
-MYSQL_ROOT_PASSWORD=<another strong password>
+POSTGRES_PASSWORD=<a strong password>
 JWT_SECRET=<output of: openssl rand -base64 48>
 ```
 
@@ -62,16 +61,25 @@ The frontend container (nginx) proxies `/api` and `/ws-native` to the backend, s
 
 ## 🛠️ Local development
 
-**Requirements:** Java 21, Node.js 22+, and MySQL 8 (local, or `docker compose up db`).
+**Requirements:** Java 21, Node.js 22+, and PostgreSQL 15+.
+
+The quickest way to get a local database is a throwaway container that matches the backend defaults:
+
+```bash
+docker run -d --name openpoker-pg -p 5432:5432 \
+  -e POSTGRES_DB=openpoker -e POSTGRES_USER=openpoker -e POSTGRES_PASSWORD=openpoker \
+  postgres:17-alpine
+```
 
 ### Backend (Spring Boot)
 
 ```bash
 cd backend
 export JWT_SECRET="$(openssl rand -base64 48)"
-export SPRING_DATASOURCE_USERNAME=root SPRING_DATASOURCE_PASSWORD=<your password>
 ./mvnw spring-boot:run
 ```
+
+It connects to `localhost:5432/openpoker` as `openpoker`/`openpoker` by default; override with the `SPRING_DATASOURCE_*` variables below.
 
 On startup the backend creates the schema (`ddl-auto=update`, to be replaced by Flyway in [#52](https://github.com/arsova-mx/OpenPoker/issues/52)) and seeds the three estimation decks.
 
@@ -91,11 +99,11 @@ The dev server runs on http://localhost:3000 and proxies `/api`, `/ws` and `/ws-
 |---|---|---|---|
 | `JWT_SECRET` | backend | *(required)* | HS256 signing key, at least 32 bytes. Generate it with `openssl rand -base64 48`. **Never reuse a secret from git history.** |
 | `JWT_EXPIRATION_MS` | backend | `3600000` | Token lifetime (1 hour) |
-| `SPRING_DATASOURCE_HOST` / `_PORT` / `_NAME` | backend | `localhost` / `3306` / `openpoker` | MySQL connection |
-| `SPRING_DATASOURCE_USERNAME` / `_PASSWORD` | backend | `root` / `root` | MySQL credentials (local development only) |
+| `SPRING_DATASOURCE_HOST` / `_PORT` / `_NAME` | backend | `localhost` / `5432` / `openpoker` | PostgreSQL connection |
+| `SPRING_DATASOURCE_USERNAME` / `_PASSWORD` | backend | `openpoker` / `openpoker` | PostgreSQL credentials (defaults are for local development only) |
 | `SERVER_PORT` | backend | `8080` | HTTP port |
 | `VITE_API_URL` | frontend (build time) | `/api` | Base URL of the REST API. Keep it relative when frontend and backend share an origin. |
-| `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD` | docker compose | see `.env.example` | Database container |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | docker compose | see `.env.example` | Database container |
 | `BACKEND_PORT`, `FRONTEND_PORT` | docker compose | `8080`, `3000` | Published ports |
 
 ### Tests and checks
@@ -114,14 +122,14 @@ flowchart LR
   B[Browser - React SPA] -->|REST /api| N[nginx]
   B -->|STOMP /ws-native| N
   N --> S[Spring Boot backend]
-  S --> D[(MySQL)]
+  S --> D[(PostgreSQL)]
 ```
 
 | Layer | Technology |
 |---|---|
 | Backend | Java 21, Spring Boot 4, Spring Security + JWT, Spring WebSocket (STOMP), Spring Data JPA |
 | Frontend | React 18, Vite 5, TypeScript, Tailwind CSS 4, shadcn/ui, Zustand, `@stomp/stompjs` |
-| Database | MySQL 8 |
+| Database | PostgreSQL 17 |
 | Infrastructure | Docker Compose, nginx |
 
 ```

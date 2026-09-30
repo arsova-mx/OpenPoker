@@ -52,8 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     env:
-      MYSQL_PASSWORD: ci-password
-      MYSQL_ROOT_PASSWORD: ci-root-password
+      POSTGRES_PASSWORD: ci-password
     steps:
       - uses: actions/checkout@v5
       - name: Generate an ephemeral JWT secret
