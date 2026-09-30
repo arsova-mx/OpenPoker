@@ -3,7 +3,6 @@ package com.openpoker.service;
 import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
-import com.openpoker.dto.RegisterResponse;
 import com.openpoker.entity.User;
 import com.openpoker.entity.UserRole;
 import com.openpoker.globalexception.InvalidCredentialsException;
@@ -21,7 +20,10 @@ public class AuthService {
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
 
-    public RegisterResponse register(RegisterRequest request) {
+    /**
+     * Registra al usuario y devuelve un token, igual que el login, para que quede autenticado al instante.
+     */
+    public AuthResponse register(RegisterRequest request) {
         if(userRepository.findByUsername(request.username()).isPresent()) {
             throw new UserAlreadyExistsException("Username");
         }
@@ -31,11 +33,11 @@ public class AuthService {
 
         User user = User.builder().username(request.username()).email(request.email()).passwordHash(passwordEncoder.encode(request.password())).role(UserRole.VOTER).build();
 
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
 
-        //String token = jwtService.generateToken(user.getUsername());
+        String token = jwtService.generateToken(savedUser);
 
-        return new RegisterResponse(user.getUsername(), user.getEmail());
+        return new AuthResponse(token, savedUser.getId(), savedUser.getUsername());
     }
 
     public AuthResponse login(LoginRequest request) {

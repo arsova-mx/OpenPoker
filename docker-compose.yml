@@ -1,24 +1,24 @@
-version: "3.9"
-
 services:
-  # ── PostgreSQL ─────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: openpoker-postgres
+  # ── Database (MySQL) ───────────────────────────────────────────
+  # The port is not published on purpose. To reach MySQL from your host during
+  # development, add a compose.override.yml with: services.db.ports: ["3306:3306"]
+  db:
+    image: mysql:8.4
+    container_name: openpoker-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "${POSTGRES_PORT}:5432"
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-openpoker}
+      MYSQL_USER: ${MYSQL_USER:-openpoker}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root --password=\"$$MYSQL_ROOT_PASSWORD\" --silent"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 30s
 
   # ── Backend (Spring Boot) ──────────────────────────────────────
   backend:
@@ -28,28 +28,47 @@ services:
     container_name: openpoker-backend
     restart: unless-stopped
     depends_on:
-      postgres:
+      db:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_DATASOURCE_HOST: db
+      SPRING_DATASOURCE_PORT: 3306
+      SPRING_DATASOURCE_NAME: ${MYSQL_DATABASE:-openpoker}
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-openpoker}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (generate one with openssl rand -base64 48)}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
     ports:
-      - "${BACKEND_PORT}:8080"
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      # Public endpoint: returns 200 once the app is up and the decks are seeded
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/card-decks || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
 
-  # ── Frontend (React + Vite) ────────────────────────────────────
+  # ── Frontend (React + Vite, served by nginx) ───────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
     container_name: openpoker-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       BACKEND_URL: http://backend:8080
     ports:
-      - "${FRONTEND_PORT}:80"
+      - "${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
 volumes:
-  postgres_data:
+  db_data:

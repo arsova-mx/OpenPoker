@@ -1,0 +1,8 @@
+# Keep the build context small and platform-independent:
+# host node_modules (e.g. macOS binaries) must never reach the Linux image.
+node_modules
+dist
+.env
+.env.*
+npm-debug.log*
+.DS_Store

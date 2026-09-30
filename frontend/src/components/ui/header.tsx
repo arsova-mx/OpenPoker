@@ -3,6 +3,8 @@ import { Link } from "react-router-dom"
 import { RiArrowDownSLine, RiMenuLine, RiUser3Line } from "@remixicon/react"
 
 import { Button } from "@/components/ui/button"
+import useAuthStore from "@/store/authStore"
+import { useLogout } from "@/hooks/useLogout"
 
 type HeaderMenuItem = {
 	label: string
@@ -15,19 +17,24 @@ type HeaderProps = {
 	menuItems?: HeaderMenuItem[]
 }
 
+// Solo rutas registradas en AppRouter. "Cerrar sesión" es una acción, no una ruta.
 const defaultMenuItems: HeaderMenuItem[] = [
-	{ label: "Dashboard", to: "/dashboard" },
-	{ label: "Sesiones", to: "/SessionLobby" },
-	{ label: "Cerrar sesion", to: "/auth/logout" },
+	{ label: "Inicio", to: "/home" },
 ]
+
+const menuItemClassName =
+	"block w-full rounded-lg px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
 
 export function Header({
 	title = "OpenPoker",
-	profileName = "Jugador",
+	profileName,
 	menuItems = defaultMenuItems,
 }: HeaderProps) {
 	const [isOpen, setIsOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement | null>(null)
+	const username = useAuthStore((state) => state.username)
+	const logout = useLogout()
+	const displayName = profileName ?? username ?? "Jugador"
 
 	useEffect(() => {
 		function handleClickOutside(event: MouseEvent) {
@@ -60,7 +67,7 @@ export function Header({
 					</div>
 					<div className="flex flex-col leading-tight">
 						<span className="text-xs text-muted-foreground">Perfil activo</span>
-						<span className="text-sm font-semibold">{profileName}</span>
+						<span className="text-sm font-semibold">{displayName}</span>
 					</div>
 				</div>
 
@@ -72,12 +79,12 @@ export function Header({
 						variant="outline"
 						aria-haspopup="menu"
 						aria-expanded={isOpen}
-						aria-label="Abrir menu"
+						aria-label="Abrir menú"
 						className="gap-2"
 						onClick={() => setIsOpen((prev) => !prev)}
 					>
 						<RiMenuLine className="size-4" aria-hidden="true" />
-						Menu
+						Menú
 						<RiArrowDownSLine
 							className={`size-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
 							aria-hidden="true"
@@ -94,12 +101,23 @@ export function Header({
 									key={item.to}
 									to={item.to}
 									role="menuitem"
-									className="block rounded-lg px-3 py-2 text-sm text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+									className={menuItemClassName}
 									onClick={() => setIsOpen(false)}
 								>
 									{item.label}
 								</Link>
 							))}
+							<button
+								type="button"
+								role="menuitem"
+								className={menuItemClassName}
+								onClick={() => {
+									setIsOpen(false)
+									logout()
+								}}
+							>
+								Cerrar sesión
+							</button>
 						</div>
 					) : null}
 				</div>

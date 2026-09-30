@@ -1,6 +1,7 @@
 import { LoginRequest, RegisterRequest, AuthResponse } from "../../types";
 import { instance } from '../clients/APIClient'
 import axios from "axios";
+import { getErrorMessage } from "@/lib/errors";
 
 
 const login = async (data: LoginRequest): Promise<AuthResponse> => {
@@ -9,12 +10,11 @@ const login = async (data: LoginRequest): Promise<AuthResponse> => {
         return response.data;
     } catch (error) {
         if (axios.isAxiosError(error)){
-            const serverMessage = error.response?.data
-            throw new Error (serverMessage || "Error de autenticación" )
+            throw new Error(getErrorMessage(error, "Error de autenticación"))
         }
         throw new Error('Ocurrió un error inesperado al conectar con el servidor');
     }
-    
+
 }
 
 const register = async (data: RegisterRequest): Promise<AuthResponse> => {
@@ -23,15 +23,17 @@ const register = async (data: RegisterRequest): Promise<AuthResponse> => {
         return response.data
     } catch (error) {
         if (axios.isAxiosError(error)){
-            const serverMessage = error.response?.data
-            throw new Error (serverMessage || "Error de Registro")
+            throw new Error(getErrorMessage(error, "Error de Registro"))
         }
         throw new Error('Ocurrió un error inesperado al conectar con el servidor');
-        
+
     }
 }
 
 const saveToken = (token: string) => {
+    if (!token) {
+        throw new Error("El servidor no devolvió un token de sesión");
+    }
     localStorage.setItem("token", token);
     const tokenDuration = new Date();
     tokenDuration.setSeconds(tokenDuration.getSeconds()+3600);
