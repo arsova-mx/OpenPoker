@@ -1,6 +1,7 @@
 package com.openpoker.entity;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -11,10 +12,12 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -22,7 +25,14 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "participants")
+@Table(name = "participants", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_participant_user", columnNames = {"game_session_id", "user_id"}),
+        @UniqueConstraint(name = "uk_participant_guest", columnNames = {"game_session_id", "guest_display_name"})
+    },
+    indexes = {
+        @Index(name = "idx_participant_user_joined", columnList = "user_id, joined_at")
+    }
+)
 @Getter
 @Setter
 @AllArgsConstructor
@@ -49,6 +59,9 @@ public class Participant {
     private Role role;
 
     private Timestamp joinedAt;
+
+    @Column(name = "left_at")
+    private Instant leftAt; // Reemplaza el borrado físico
 
     @PrePersist
     public void prePersist() {

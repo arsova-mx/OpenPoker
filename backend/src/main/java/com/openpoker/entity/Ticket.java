@@ -50,12 +50,23 @@ public class Ticket {
     @Column(nullable = false)
     private TicketStatus status;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt = Instant.now();
+
+    @Column(name = "position")
+    private Integer position;
+
+    @Column(name = "current_round", nullable = false)
+    private Integer currentRound = 1;
+
+    @Column(name = "finished_at")
+    private Instant finishedAt;
+
     
-    @ManyToOne
-    @JoinColumn(name = "estimated_card_id") // Relación con el catálogo oficial
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "estimated_card_id")
     private CardValue estimatedCard;
 
-    private Integer estimatedValue;
 
     @Column(name = "duration_seconds")
     private Integer durationSeconds;
