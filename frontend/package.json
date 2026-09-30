@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "description": "OpenPoker – Planning Poker frontend (React + Vite + TypeScript)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
