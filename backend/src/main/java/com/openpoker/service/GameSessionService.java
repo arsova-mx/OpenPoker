@@ -200,7 +200,21 @@ public class GameSessionService {
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
         long count = participantRepository.countByGameSession(session);
 
-        return new SessionResponse(session.getId(), session.getSessionCode(), session.getName(), hostUsername, count, session.getCreatedAt());
+        UUID deckId = session.getDeck() != null ? session.getDeck().getId() : null;
+        String seriesType = session.getDeck() != null && session.getDeck().getSeriesType() != null
+                ? session.getDeck().getSeriesType().name()
+                : "FIBONACCI";
+
+        return new SessionResponse(
+            session.getId(),
+            session.getSessionCode(),
+            session.getName(),
+            hostUsername,
+            count,
+            session.getCreatedAt(),
+            deckId,
+            seriesType
+        );
     }
 
 
