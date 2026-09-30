@@ -16,9 +16,10 @@ import org.springframework.web.bind.annotation.RestController;
 import com.openpoker.entity.Comments;
 import com.openpoker.entity.Ticket;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.UserNotFoundException;
 import com.openpoker.repository.CommentRepository;
-import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.service.SessionAccessService;
 import com.openpoker.dto.CommentReponseDTO;
 
 
@@ -29,8 +30,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CommentController {
     private final CommentRepository commentRepository;
-    private final TicketRepository ticketRepository;
     private final UserRepository userRepository;
+    private final SessionAccessService sessionAccessService;
 
     // 🚀 POST /api/tickets/{ticketId}/comments -> Agregar un comentario
     @PostMapping
@@ -39,11 +40,11 @@ public class CommentController {
             @PathVariable UUID ticketId,
             @RequestBody MapCommentDTO dto) {
 
-        Ticket ticket = ticketRepository.findById(ticketId)
-                .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
-                
+        // Solo los participantes de la sala pueden comentar sus tickets
+        Ticket ticket = sessionAccessService.requireParticipantOfTicket(ticketId, username);
+
         User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+                .orElseThrow(() -> new UserNotFoundException("Usuario no encontrado"));
 
         Comments comment = Comments.builder()
                 .ticket(ticket)
@@ -66,7 +67,11 @@ public class CommentController {
 
     // 🚀 GET /api/tickets/{ticketId}/comments -> Ver la discusión del ticket
     @GetMapping
-    public ResponseEntity<List<CommentReponseDTO>> getComments(@PathVariable UUID ticketId) {
+    public ResponseEntity<List<CommentReponseDTO>> getComments(
+            @AuthenticationPrincipal String username,
+            @PathVariable UUID ticketId) {
+        sessionAccessService.requireParticipantOfTicket(ticketId, username);
+
         // 1. Obtenemos las entidades de la base de datos
         List<Comments> entities = commentRepository.findByTicketIdOrderByCreatedAtAsc(ticketId);
 

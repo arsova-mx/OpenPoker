@@ -79,7 +79,18 @@ public class GlobalExceptionHandler {
             errors.put(error.getField(), error.getDefaultMessage());
         });
 
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
+        // "message" resume el primer error para que el frontend pueda mostrarlo directamente
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getDefaultMessage())
+                .orElse("Datos inválidos");
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", message, "errors", errors));
+    }
+
+    @ExceptionHandler(TicketNotFoundException.class)
+    public ResponseEntity<?> handleTicketNotFoundException(TicketNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ex.getMessage());
     }
 
     @ExceptionHandler(ParticipantNotFoundException.class)
