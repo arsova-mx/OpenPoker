@@ -37,6 +37,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (generate one with openssl rand -base64 48)}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
+      # Orígenes del navegador permitidos (CORS y WebSocket). En producción: https://tu-dominio
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000}}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:

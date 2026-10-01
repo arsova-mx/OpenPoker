@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,7 +27,15 @@ public class ApiTestClient {
         this.baseUrl = "http://localhost:" + port;
     }
 
-    public record Response(int status, String body, ObjectMapper json) {
+    public record Response(int status, String body, ObjectMapper json, Map<String, List<String>> headers) {
+        public String header(String name) {
+            return headers.entrySet().stream()
+                    .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                    .flatMap(entry -> entry.getValue().stream())
+                    .findFirst()
+                    .orElse(null);
+        }
+
         @SuppressWarnings("unchecked")
         public Map<String, Object> asMap() {
             return json.readValue(body, Map.class);
@@ -42,19 +51,24 @@ public class ApiTestClient {
     }
 
     public Response call(String method, String path, String token, Object body) {
+        return call(method, path, token, body, Map.of());
+    }
+
+    public Response call(String method, String path, String token, Object body, Map<String, String> extraHeaders) {
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
                     .header("Content-Type", "application/json");
             if (token != null) {
                 request.header("Authorization", "Bearer " + token);
             }
+            extraHeaders.forEach(request::header);
             HttpRequest.BodyPublisher publisher = body == null
                     ? HttpRequest.BodyPublishers.noBody()
                     : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body));
             request.method(method, publisher);
 
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
-            return new Response(response.statusCode(), response.body(), json);
+            return new Response(response.statusCode(), response.body(), json, response.headers().map());
         } catch (IOException e) {
             throw new IllegalStateException("Fallo la petición " + method + " " + path, e);
         } catch (InterruptedException e) {

@@ -1,3 +1,19 @@
+# Esquema y puerto públicos que ve el navegador, para que el backend reconozca como "mismo origen"
+# las peticiones del frontend (CORS y WebSocket). Si delante de este nginx hay otro proxy que termina
+# TLS (Cloudflare, un balanceador), se respetan sus X-Forwarded-Proto / X-Forwarded-Port; si no, se
+# usan el esquema de esta petición y el puerto del header Host.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+map "$http_x_forwarded_port|$http_host|$forwarded_proto" $forwarded_port {
+    "~^(?<fwd_port>[0-9]+)\|"           $fwd_port;
+    "~^\|[^|]*:(?<host_port>[0-9]+)\|"  $host_port;
+    "~\|https$"                         443;
+    default                             80;
+}
+
 server {
     listen 80;
     server_name _;
@@ -9,13 +25,15 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
-    # Proxy para endpoints REST hacia el backend
+    # Proxy para endpoints REST hacia el backend.
+    # Host conserva el puerto ($http_host); el esquema y el puerto públicos viajan en X-Forwarded-*.
     location /api/ {
         proxy_pass ${BACKEND_URL};
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Port $forwarded_port;
     }
 
     # Proxy para WebSockets STOMP nativos
@@ -24,9 +42,11 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "Upgrade";
-        proxy_set_header Host $host;
+        proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header X-Forwarded-Port $forwarded_port;
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
     }
