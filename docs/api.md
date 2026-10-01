@@ -16,6 +16,23 @@ OpenPoker exposes a **REST API** under `/api` and a **STOMP over WebSocket** API
 
 Browsers can only call the API and open the WebSocket from the origins listed in `ALLOWED_ORIGINS` (comma separated, patterns like `https://*.pages.dev` allowed), plus the backend's own origin. Requests from other origins get `403`. Requests without an `Origin` header (servers, curl) are not affected.
 
+## Rate limits
+
+Public endpoints that can be abused are limited per client IP. Each limit is a token bucket: `capacity` attempts in a row, recovered gradually over `period`.
+
+| Endpoint | Default | Property |
+|---|---|---|
+| `POST /api/auth/login` | 10 per minute per IP | `app.rate-limit.login.*` |
+| `POST /api/auth/register` | 5 per 10 minutes per IP | `app.rate-limit.register.*` |
+| `POST /api/sessions/{code}/guests` | 30 per minute per IP | `app.rate-limit.guest-join.*` |
+| Failed logins for the same account, from any IP | 5 per 5 minutes (a successful login resets it) | `app.rate-limit.login-failures.*` |
+
+When a limit is hit the API answers `429 Too Many Requests` with a `Retry-After` header (seconds) and `{ message, retryAfterSeconds }`. Limits can be tuned with environment variables (for example `APP_RATELIMIT_LOGIN_CAPACITY=20`) or disabled with `APP_RATELIMIT_ENABLED=false`.
+
+The client IP is taken from `X-Forwarded-For` when the request comes from an internal proxy (the frontend's nginx). **Behind Cloudflare**, configure nginx to use the real client IP (`real_ip_header CF-Connecting-IP;` plus `set_real_ip_from` with Cloudflare's IP ranges). Otherwise every user is seen with Cloudflare's IPs and users would share limits.
+
+The counters live in the memory of each backend instance.
+
 ## REST endpoints
 
 | Method | Path | Auth | Body / params | Description |
