@@ -130,27 +130,9 @@ public class GameSessionService {
                 participant = participantRepository.save(participant);
             }
 
-        // CASO 2: Es Invitado (trae guestName)
-        } else if (request.guestName() != null && !request.guestName().isBlank()) {
-            
-            // 🚀 Búsqueda de invitado existente para evitar duplicados en reconexión
-            var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, request.guestName());
-
-            if (existingGuest.isPresent()) {
-                participant = existingGuest.get(); // Reutilizar el invitado existente
-            } else {
-                participant = Participant.builder()
-                        .gameSession(session)
-                        .user(null)
-                        .guestDisplayName(request.guestName())
-                        .role(Participant.Role.VOTER)
-                        .build();
-
-                participant = participantRepository.save(participant);
-            }
-
+        // Los invitados entran por joinAsGuest (POST /api/sessions/{code}/guests) y reciben un token propio
         } else {
-            throw new IllegalArgumentException("Debe proporcionar un usuario registrado o un nombre de invitado.");
+            throw new IllegalArgumentException("Se requiere un usuario autenticado para unirse con este endpoint.");
         }
 
         String hostName = getHostDisplayName(session);
@@ -158,6 +140,35 @@ public class GameSessionService {
         return mapToResponse(session, hostName);
     }
     
+    /**
+     * Une a un invitado sin cuenta. El nombre no puede coincidir (sin distinguir mayúsculas) con otro
+     * participante de la sala ni con un usuario registrado, para que nadie se haga pasar por otro.
+     */
+    @Transactional
+    public Participant joinAsGuest(String code, String guestName) {
+        GameSession session = sessionRepository.findBySessionCode(code)
+                .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+        String displayName = guestName.trim();
+
+        boolean takenInSession = participantRepository.findAllByGameSession(session).stream()
+                .anyMatch(existing -> existing.getEffectiveName().equalsIgnoreCase(displayName));
+        if (takenInSession || userRepository.existsByUsernameIgnoreCase(displayName)) {
+            throw new GuestNameUnavailableException("Ese nombre ya está en uso, elige otro");
+        }
+
+        Participant guest = Participant.builder()
+                .gameSession(session)
+                .user(null)
+                .guestDisplayName(displayName)
+                .role(Participant.Role.VOTER)
+                .build();
+        return participantRepository.save(guest);
+    }
+
+    public SessionResponse getSessionResponse(GameSession session) {
+        return mapToResponse(session, getHostDisplayName(session));
+    }
+
     // Helper para obtener el nombre del Host sin asumir que es un User
     private String getHostDisplayName(GameSession session) {
         if (session.getHostUserId() == null) {

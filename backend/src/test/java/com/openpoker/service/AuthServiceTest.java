@@ -3,6 +3,7 @@ package com.openpoker.service;
 import com.openpoker.dto.AuthResponse;
 import com.openpoker.dto.RegisterRequest;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.InvalidValueException;
 import com.openpoker.globalexception.UserAlreadyExistsException;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
@@ -42,7 +43,7 @@ class AuthServiceTest {
     @DisplayName("El registro devuelve un token para que el usuario quede autenticado")
     void registerReturnsToken() {
         UUID generatedId = UUID.randomUUID();
-        when(userRepository.findByUsername("ana")).thenReturn(Optional.empty());
+        when(userRepository.existsByUsernameIgnoreCase("ana")).thenReturn(false);
         when(userRepository.findByEmail("ana@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode("secret123")).thenReturn("hashed");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
@@ -61,12 +62,21 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("No permite registrar un username existente")
+    @DisplayName("No permite registrar un username existente, sin distinguir mayúsculas")
     void registerRejectsDuplicateUsername() {
-        when(userRepository.findByUsername("ana")).thenReturn(Optional.of(new User()));
+        when(userRepository.existsByUsernameIgnoreCase("ana")).thenReturn(true);
 
         assertThrows(UserAlreadyExistsException.class, () -> authService.register(request));
         verify(userRepository, never()).save(any());
         verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    @DisplayName("No permite registrar nombres reservados como anonymousUser")
+    void registerRejectsReservedUsernames() {
+        RegisterRequest reserved = new RegisterRequest("AnonymousUser", "x@example.com", "secret123");
+
+        assertThrows(InvalidValueException.class, () -> authService.register(reserved));
+        verify(userRepository, never()).save(any());
     }
 }
