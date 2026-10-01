@@ -86,6 +86,22 @@ class CorsIntegrationTest {
     }
 
     @Test
+    @DisplayName("Detrás de un proxy que termina TLS, el mismo origen se reconoce por X-Forwarded-Proto/Port")
+    void sameOriginBehindTlsProxy() {
+        String publicOrigin = "https://localhost:" + port;
+
+        Response viaProxy = api.call("GET", "/api/card-decks", null, null, Map.of(
+                "Origin", publicOrigin,
+                "X-Forwarded-Proto", "https",
+                "X-Forwarded-Port", String.valueOf(port)));
+        assertEquals(200, viaProxy.status(), "La petición del mismo origen detrás del proxy debía aceptarse");
+
+        // Control: sin los headers del proxy, un Origin https no coincide con la petición http
+        Response direct = api.call("GET", "/api/card-decks", null, null, Map.of("Origin", publicOrigin));
+        assertEquals(403, direct.status());
+    }
+
+    @Test
     @DisplayName("El WebSocket acepta orígenes permitidos y rechaza los demás en el handshake")
     void websocketHandshakeChecksOrigin() throws Exception {
         try (StompTestClient allowed = StompTestClient.connect(port, null, ALLOWED)) {

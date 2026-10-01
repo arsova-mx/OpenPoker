@@ -51,6 +51,16 @@ pass "$deck_count barajas sembradas, todas con cartas"
 [[ "$(request GET "$API/card-decks" "" "" "https://evil.example.com")" == "403" ]] || fail "Una petición desde un origen ajeno no fue rechazada"
 pass "CORS: origen del frontend permitido, origen ajeno rechazado"
 
+# 3c. Detrás de un proxy que termina TLS (p. ej. Cloudflare): nginx conserva X-Forwarded-Proto y el
+#     backend reconoce el mismo origen aunque no esté en ALLOWED_ORIGINS
+behind_tls() {
+  curl -sS -o /dev/null -w '%{http_code}' -H 'Host: openpoker.example.com' -H 'X-Forwarded-Proto: https' \
+    -H "Origin: $1" "$API/card-decks"
+}
+[[ "$(behind_tls https://openpoker.example.com)" == "200" ]] || fail "El mismo origen detrás de un proxy TLS fue rechazado"
+[[ "$(behind_tls https://evil.example.com)" == "403" ]] || fail "Un origen ajeno detrás de un proxy TLS no fue rechazado"
+pass "CORS detrás de un proxy TLS: mismo origen reconocido, origen ajeno rechazado"
+
 # 4. El registro devuelve un token utilizable (#45)
 user="smoke$(date +%s)$RANDOM"
 status="$(request POST "$API/auth/register" "{\"username\":\"$user\",\"email\":\"$user@example.com\",\"password\":\"smoke-pass-123\"}")"
