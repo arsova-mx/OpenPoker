@@ -81,7 +81,7 @@ export JWT_SECRET="$(openssl rand -base64 48)"
 
 It connects to `localhost:5432/openpoker` as `openpoker`/`openpoker` by default; override with the `SPRING_DATASOURCE_*` variables below.
 
-On startup the backend creates the schema (`ddl-auto=update`, to be replaced by Flyway in [#52](https://github.com/arsova-mx/OpenPoker/issues/52)) and seeds the three estimation decks.
+On startup the backend applies the database migrations (Flyway, see [docs/database.md](docs/database.md)) and seeds the three estimation decks. Add `SPRING_PROFILES_ACTIVE=dev` to log the SQL.
 
 ### Frontend (React + Vite)
 
@@ -150,11 +150,11 @@ OpenPoker/
 │   ├── pages/  routes/   # Pages and React Router config
 │   ├── store/            # Zustand stores
 │   └── types/            # Shared TypeScript types
-├── docs/                 # API reference and vision
+├── docs/                 # API reference, database/migrations and vision
 └── docker-compose.yml
 ```
 
-The REST and WebSocket contract is documented in **[docs/api.md](docs/api.md)**.
+The REST and WebSocket contract is documented in **[docs/api.md](docs/api.md)**, and the database schema and migrations in **[docs/database.md](docs/database.md)**.
 
 ## 🤝 Contributing
 
