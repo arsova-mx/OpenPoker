@@ -1,6 +1,9 @@
 package com.openpoker.security;
 
 import com.openpoker.config.CorsProperties;
+import com.openpoker.ratelimit.RateLimitFilter;
+import com.openpoker.ratelimit.RateLimitProperties;
+import com.openpoker.ratelimit.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -19,6 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.time.Duration;
 import java.util.List;
@@ -27,10 +31,12 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
-@EnableConfigurationProperties(CorsProperties.class)
+@EnableConfigurationProperties({CorsProperties.class, RateLimitProperties.class})
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtFilter;
     private final CorsProperties corsProperties;
+    private final RateLimiter rateLimiter;
+    private final RateLimitProperties rateLimitProperties;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -47,6 +53,8 @@ public class SecurityConfig {
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
         
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        // Después de CORS, para que el navegador pueda leer el 429 en peticiones cross-origin
+        http.addFilterAfter(new RateLimitFilter(rateLimiter, rateLimitProperties), CorsFilter.class);
 
         return http.build();
     }

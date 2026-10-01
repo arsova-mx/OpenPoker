@@ -88,6 +88,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", message, "errors", errors));
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<?> handleTooManyRequestsException(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(Map.of("message", ex.getMessage(), "retryAfterSeconds", ex.getRetryAfterSeconds()));
+    }
+
     @ExceptionHandler(GuestNameUnavailableException.class)
     public ResponseEntity<?> handleGuestNameUnavailableException(GuestNameUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());

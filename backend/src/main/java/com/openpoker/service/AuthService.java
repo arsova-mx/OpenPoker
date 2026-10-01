@@ -8,6 +8,7 @@ import com.openpoker.entity.UserRole;
 import com.openpoker.globalexception.InvalidCredentialsException;
 import com.openpoker.globalexception.InvalidValueException;
 import com.openpoker.globalexception.UserAlreadyExistsException;
+import com.openpoker.ratelimit.LoginAttemptService;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final LoginAttemptService loginAttemptService;
 
     /**
      * Registra al usuario y devuelve un token, igual que el login, para que quede autenticado al instante.
@@ -57,12 +59,17 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.username()).orElseThrow(() -> new InvalidCredentialsException());
+        // Bloqueo temporal tras varios intentos fallidos contra la misma cuenta, desde cualquier IP
+        loginAttemptService.ensureNotLocked(request.username());
 
-        if(!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        User user = userRepository.findByUsername(request.username()).orElse(null);
+
+        if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            loginAttemptService.recordFailure(request.username());
             throw new InvalidCredentialsException();
         }
 
+        loginAttemptService.recordSuccess(request.username());
         String token = jwtService.generateToken(user);
 
         return new AuthResponse(token, user.getId(), user.getUsername());

@@ -1,10 +1,13 @@
 package com.openpoker.service;
 
 import com.openpoker.dto.AuthResponse;
+import com.openpoker.dto.LoginRequest;
 import com.openpoker.dto.RegisterRequest;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.InvalidCredentialsException;
 import com.openpoker.globalexception.InvalidValueException;
 import com.openpoker.globalexception.UserAlreadyExistsException;
+import com.openpoker.ratelimit.LoginAttemptService;
 import com.openpoker.repository.UserRepository;
 import com.openpoker.security.JwtService;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +36,9 @@ class AuthServiceTest {
 
     @Mock
     private PasswordEncoder passwordEncoder;
+
+    @Mock
+    private LoginAttemptService loginAttemptService;
 
     @InjectMocks
     private AuthService authService;
@@ -69,6 +75,31 @@ class AuthServiceTest {
         assertThrows(UserAlreadyExistsException.class, () -> authService.register(request));
         verify(userRepository, never()).save(any());
         verifyNoInteractions(jwtService);
+    }
+
+    @Test
+    @DisplayName("Un login fallido se registra para el bloqueo por cuenta")
+    void failedLoginIsRecorded() {
+        when(userRepository.findByUsername("ana")).thenReturn(Optional.empty());
+
+        assertThrows(InvalidCredentialsException.class,
+                () -> authService.login(new LoginRequest("ana", "wrong")));
+        verify(loginAttemptService).ensureNotLocked("ana");
+        verify(loginAttemptService).recordFailure("ana");
+        verify(loginAttemptService, never()).recordSuccess(any());
+    }
+
+    @Test
+    @DisplayName("Un login correcto reinicia el contador de fallos")
+    void successfulLoginResetsFailures() {
+        User ana = User.builder().id(UUID.randomUUID()).username("ana").passwordHash("hashed").build();
+        when(userRepository.findByUsername("ana")).thenReturn(Optional.of(ana));
+        when(passwordEncoder.matches("secret123", "hashed")).thenReturn(true);
+        when(jwtService.generateToken(ana)).thenReturn("jwt-token");
+
+        assertEquals("jwt-token", authService.login(new LoginRequest("ana", "secret123")).token());
+        verify(loginAttemptService).recordSuccess("ana");
+        verify(loginAttemptService, never()).recordFailure(any());
     }
 
     @Test
