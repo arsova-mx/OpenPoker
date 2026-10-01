@@ -1,24 +1,23 @@
 services:
-  # ── Database (MySQL) ───────────────────────────────────────────
-  # The port is not published on purpose. To reach MySQL from your host during
-  # development, add a compose.override.yml with: services.db.ports: ["3306:3306"]
+  # ── Database (PostgreSQL) ──────────────────────────────────────
+  # The port is not published on purpose. To reach PostgreSQL from your host during
+  # development, add a compose.override.yml with: services.db.ports: ["5432:5432"]
   db:
-    image: mysql:8.4
+    image: postgres:17-alpine
     container_name: openpoker-db
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-openpoker}
-      MYSQL_USER: ${MYSQL_USER:-openpoker}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-openpoker}
+      POSTGRES_USER: ${POSTGRES_USER:-openpoker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - db_data:/var/lib/mysql
+      - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root --password=\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 30s
+      start_period: 20s
 
   # ── Backend (Spring Boot) ──────────────────────────────────────
   backend:
@@ -32,10 +31,10 @@ services:
         condition: service_healthy
     environment:
       SPRING_DATASOURCE_HOST: db
-      SPRING_DATASOURCE_PORT: 3306
-      SPRING_DATASOURCE_NAME: ${MYSQL_DATABASE:-openpoker}
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-openpoker}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      SPRING_DATASOURCE_PORT: 5432
+      SPRING_DATASOURCE_NAME: ${POSTGRES_DB:-openpoker}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-openpoker}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (generate one with openssl rand -base64 48)}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-3600000}
     ports:
