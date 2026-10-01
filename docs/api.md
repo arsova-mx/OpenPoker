@@ -12,6 +12,10 @@ OpenPoker exposes a **REST API** under `/api` and a **STOMP over WebSocket** API
 - **Guests** (no account) call `POST /api/sessions/{code}/guests` and get a **guest token**. It identifies that guest inside that single session over WebSocket and is rejected by the REST API.
 - Session data (backlog, comments, real-time events) is only available to **participants** of that session.
 
+## CORS
+
+Browsers can only call the API and open the WebSocket from the origins listed in `ALLOWED_ORIGINS` (comma separated, patterns like `https://*.pages.dev` allowed), plus the backend's own origin. Requests from other origins get `403`. Requests without an `Origin` header (servers, curl) are not affected.
+
 ## REST endpoints
 
 | Method | Path | Auth | Body / params | Description |

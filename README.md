@@ -102,6 +102,7 @@ The dev server runs on http://localhost:3000 and proxies `/api`, `/ws` and `/ws-
 | `SPRING_DATASOURCE_HOST` / `_PORT` / `_NAME` | backend | `localhost` / `5432` / `openpoker` | PostgreSQL connection |
 | `SPRING_DATASOURCE_USERNAME` / `_PASSWORD` | backend | `openpoker` / `openpoker` | PostgreSQL credentials (defaults are for local development only) |
 | `SERVER_PORT` | backend | `8080` | HTTP port |
+| `ALLOWED_ORIGINS` | backend | `http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173` (compose: `http://localhost:${FRONTEND_PORT}`) | Comma-separated browser origins allowed to call the API and open the WebSocket (CORS). Patterns such as `https://*.pages.dev` are supported. Same-origin requests are always allowed. **Set it to your public frontend URL in production.** |
 | `VITE_API_URL` | frontend (build time) | `/api` | Base URL of the REST API. Keep it relative when frontend and backend share an origin. |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | docker compose | see `.env.example` | Database container |
 | `BACKEND_PORT`, `FRONTEND_PORT` | docker compose | `8080`, `3000` | Published ports |

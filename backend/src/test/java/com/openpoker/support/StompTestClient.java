@@ -32,6 +32,11 @@ public class StompTestClient implements AutoCloseable {
     }
 
     public static StompTestClient connect(int port, String token) throws Exception {
+        return connect(port, token, null);
+    }
+
+    /** Conecta enviando el header Origin, como lo haría un navegador desde ese sitio. */
+    public static StompTestClient connect(int port, String token, String origin) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         client.setMessageConverter(new SimpleMessageConverter());
 
@@ -43,7 +48,7 @@ public class StompTestClient implements AutoCloseable {
         BlockingQueue<String> errors = new LinkedBlockingQueue<>();
         StompSession session = client.connectAsync(
                 "ws://localhost:" + port + "/ws-native",
-                new WebSocketHttpHeaders(),
+                handshakeHeaders(origin),
                 connectHeaders,
                 new StompSessionHandlerAdapter() {
                     @Override
@@ -63,6 +68,14 @@ public class StompTestClient implements AutoCloseable {
                 }).get(5, TimeUnit.SECONDS);
 
         return new StompTestClient(session, errors);
+    }
+
+    private static WebSocketHttpHeaders handshakeHeaders(String origin) {
+        WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
+        if (origin != null) {
+            headers.setOrigin(origin);
+        }
+        return headers;
     }
 
     /** Suscribe y devuelve la cola donde se acumulan los mensajes (como String JSON). */

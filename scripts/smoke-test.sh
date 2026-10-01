@@ -14,11 +14,12 @@ trap 'rm -rf "$TMP"' EXIT
 pass() { printf '  \033[32m✔\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31m✘\033[0m %s\n' "$1" >&2; exit 1; }
 
-# request METHOD URL [BODY] [TOKEN] -> escribe el body en $TMP/body e imprime el status HTTP
+# request METHOD URL [BODY] [TOKEN] [ORIGIN] -> escribe el body en $TMP/body e imprime el status HTTP
 request() {
-  local method="$1" url="$2" body="${3:-}" token="${4:-}"
+  local method="$1" url="$2" body="${3:-}" token="${4:-}" origin="${5:-}"
   local args=(-sS -o "$TMP/body" -w '%{http_code}' -X "$method" -H 'Content-Type: application/json')
   [[ -n "$token" ]] && args+=(-H "Authorization: Bearer $token")
+  [[ -n "$origin" ]] && args+=(-H "Origin: $origin")
   [[ -n "$body" ]] && args+=(--data "$body")
   curl "${args[@]}" "$url"
 }
@@ -44,6 +45,11 @@ empty_decks="$(jq '[.[] | select((.cards | length) == 0)] | length' "$TMP/body")
 [[ "$deck_count" -ge 3 ]] || fail "Se esperaban al menos 3 barajas y hay $deck_count"
 [[ "$empty_decks" -eq 0 ]] || fail "$empty_decks baraja(s) sin cartas"
 pass "$deck_count barajas sembradas, todas con cartas"
+
+# 3b. CORS a través de nginx (#57): el origen del propio frontend funciona y uno ajeno se rechaza
+[[ "$(request GET "$API/card-decks" "" "" "$BASE_URL")" == "200" ]] || fail "Una petición desde el origen del frontend fue rechazada"
+[[ "$(request GET "$API/card-decks" "" "" "https://evil.example.com")" == "403" ]] || fail "Una petición desde un origen ajeno no fue rechazada"
+pass "CORS: origen del frontend permitido, origen ajeno rechazado"
 
 # 4. El registro devuelve un token utilizable (#45)
 user="smoke$(date +%s)$RANDOM"
