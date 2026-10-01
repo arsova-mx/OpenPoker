@@ -120,7 +120,8 @@ public class VoteController {
                 ticket.getTittle(),
                 ticket.getDescription(),
                 ticket.getGameSession().getId(),
-                ticket.getStatus()
+                ticket.getStatus(),
+                ticket.getCurrentRound()
             );
             messagingTemplate.convertAndSend("/topic/session/" + code + "/ticket-updated", ticketDto);
         });

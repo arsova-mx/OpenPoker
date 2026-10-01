@@ -65,7 +65,8 @@ public class TicketController {
                     t.getTittle(),
                     t.getDescription(),
                     t.getGameSession().getId(),
-                    t.getStatus()
+                    t.getStatus(),
+                    t.getCurrentRound()
                 ))
                 .toList();
 

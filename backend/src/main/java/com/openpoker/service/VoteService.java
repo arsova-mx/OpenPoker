@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+// NUEVO: WEBSOCKET - Importación necesaria para enviar mensajes
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -39,6 +41,9 @@ public class VoteService {
     private final CardValueRepository cardValueRepository;
     private final VotingDeckRepository deckRepository;
     private final VoteStatisticsService voteStatisticsService;
+    
+    // NUEVO: WEBSOCKET - Inyección de la plantilla de mensajería
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Transactional
     public VoteResponse submitVote(UUID sessionId, UUID ticketId, UUID participantId, UUID value) {
@@ -79,7 +84,7 @@ public class VoteService {
             throw new InvalidVoteValueException("Valor invalido");
         }
 
-        Vote vote = voteRepository.findByTicketAndParticipant(ticket, participant).orElse(null);
+        Vote vote = voteRepository.findByTicketAndParticipantAndRound(ticket, participant, ticket.getCurrentRound()).orElse(null);
         Vote savedVote;
 
         if (vote != null) {
@@ -90,9 +95,13 @@ public class VoteService {
                     .ticket(ticket)
                     .participant(participant)
                     .cardValue(card)
+                    .round(ticket.getCurrentRound())
                     .build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
+
+        // OPCIONAL: Si quieres avisar en tiempo real que alguien votó (sin revelar el valor)
+        // messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/votes", "NEW_VOTE");
 
         return new VoteResponse(
                 savedVote.getId(),
@@ -115,7 +124,7 @@ public class VoteService {
             throw new UsernameIsNotParticipantSessionException("Participante no pertenece a la sesion");
         }
 
-        List<Vote> votes = voteRepository.findAllByTicket(ticket);
+        List<Vote> votes = voteRepository.findAllByTicketAndRound(ticket, ticket.getCurrentRound());
 
         boolean isTicketRevealed = ticket.getStatus() == TicketStatus.REVEALED 
                                 || ticket.getStatus() == TicketStatus.FINISHED;
@@ -151,7 +160,7 @@ public class VoteService {
 
         List<Participant> participants = participantRepository.findAllByGameSession(session);
         
-        Set<UUID> votedParticipantIds = voteRepository.findAllByTicket(ticket).stream()
+        Set<UUID> votedParticipantIds = voteRepository.findAllByTicketAndRound(ticket, ticket.getCurrentRound()).stream()
                 .map(vote -> vote.getParticipant().getId())
                 .collect(Collectors.toSet());
 
@@ -189,23 +198,21 @@ public class VoteService {
             throw new OnlyHostCanRevealVotesException("Solo el host puede revelar");
         }
 
-        List<Vote> votes = voteRepository.findAllByTicketId(ticketId);
+        List<Vote> votes = voteRepository.findAllByTicketIdAndRound(ticketId, ticket.getCurrentRound());
 
         session.setVotesRevealed(true);
         ticket.setStatus(TicketStatus.REVEALED);
 
         sessionRepository.save(session);
+        ticketRepository.save(ticket);
 
-        // 1. Calcular estadísticas
         VoteStatisticsDTO statistics = voteStatisticsService.calculateStatistics(votes);
         
-        // 2. Determinar la baraja (usar la de la sesión o fallback por serie FIBONACCI en DB)
         VotingDeck activeDeck = session.getDeck();
         if (activeDeck == null) {
             activeDeck = deckRepository.findBySeriesType(CardSeries.FIBONACCI).orElse(null);
         }
 
-        // 3. Buscar carta sugerida de forma portable usando el ID real obtenido de la base de datos
         CardValue suggested = null;
         if (activeDeck != null && statistics.average() > 0) {
             suggested = cardValueRepository.findClosestByWeight(
@@ -214,7 +221,6 @@ public class VoteService {
             ).orElse(null);
         }
 
-        // 4. Mapear votos a DTOs
         List<VoteResponse> voteResponses = votes.stream()
                 .map(v -> new VoteResponse(
                     v.getId(), 
@@ -224,8 +230,7 @@ public class VoteService {
                 ))
                 .toList();
 
-        // 5. Retornar el DTO con sugerencia calculada
-        return new VotingRRAverage(
+        VotingRRAverage result = new VotingRRAverage(
                 session.getSessionCode(),
                 voteResponses,
                 true,
@@ -233,6 +238,11 @@ public class VoteService {
                 suggested != null ? suggested.getValue() : "—",
                 statistics
         );
+
+        // OPCIONAL: Enviar evento por WebSocket de que se revelaron los votos
+        // messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/reveal", result);
+
+        return result;
     }
 
     public VoteResponse castVote(String username, String sessionCode, UUID ticketId, CastVoteRequest request) {
@@ -288,9 +298,21 @@ public class VoteService {
             throw new InsufficientRoleException("Solo el host puede reiniciar la votacion");
         }
 
-        voteRepository.deleteAllByTicket(ticket);
+        ticket.setCurrentRound(ticket.getCurrentRound() + 1);
+        
         session.setVotesRevealed(false);
         ticket.setStatus(TicketStatus.VOTING);
+        
+        ticketRepository.save(ticket);
         sessionRepository.save(session);
+
+        // NUEVO: WEBSOCKET - Enviar la notificación al cliente
+        // Cambia el string del destino ("topic/session/...") al formato que use tu controlador WebSocket
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("action", "VOTES_RESET");
+        payload.put("ticketId", ticket.getId());
+        payload.put("newRound", ticket.getCurrentRound());
+
+        messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/votes", payload);
     }
 }

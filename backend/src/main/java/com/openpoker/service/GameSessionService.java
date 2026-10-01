@@ -1,10 +1,10 @@
 package com.openpoker.service;
 
 import com.openpoker.entity.*;
+import com.openpoker.entity.SessionStatus;
 import com.openpoker.globalexception.*;
 import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
-
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +24,7 @@ import com.openpoker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.UUID;
 import java.util.List;
 
@@ -43,37 +44,37 @@ public class GameSessionService {
     @Transactional
     public SessionResponse createSession(String username, CreateSessionRequest request, UUID deckId) {
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-
         VotingDeck deck = deckRepository.findById(deckId).orElseThrow(() -> new DeckNotFoundException("Deck no encontrado"));
-
         return createSessionWithDeck(user, request, deck);
     }
 
     @Transactional
     public SessionResponse createSessionWithDefaultDeck(String username, CreateSessionRequest request) {
         User user = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-
         VotingDeck deck = deckRepository.findBySeriesType(CardSeries.FIBONACCI)
                 .orElseThrow(() -> new DeckNotFoundException("Deck Fibonacci no encontrado"));
-
         return createSessionWithDeck(user, request, deck);
     }
 
     private SessionResponse createSessionWithDeck(User user, CreateSessionRequest request, VotingDeck deck) {
-
         GameSession session = null;
 
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
-
-            GameSession candidate = GameSession.builder().sessionCode(code).name(request.name()).hostUserId(user.getId()).deck(deck).build();
+            
+            // ✅ CORREGIDO: Se pasa la entidad User completa en 'host(user)'
+            GameSession candidate = GameSession.builder()
+                .sessionCode(code)
+                .name(request.name())
+                .host(user)
+                .deck(deck)
+                .status(SessionStatus.ACTIVE)
+                .build();
 
             try {
                 session = sessionRepository.saveAndFlush(candidate);
-
                 break;
             } catch (DataIntegrityViolationException ex) {
-                // Una colisión de restricción única en sessionCode significa que otra solicitud ganó la carrera.
                 if (attempt == MAX_SESSION_CODE_RETRIES - 1) {
                     throw ex;
                 }
@@ -85,7 +86,6 @@ public class GameSessionService {
         }
 
         Participant host = Participant.builder().gameSession(session).user(user).role(Participant.Role.HOST).build();
-
         participantRepository.save(host);
 
         return mapToResponse(session, user.getUsername());
@@ -93,30 +93,35 @@ public class GameSessionService {
 
     public SessionResponse getSessionByCode(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
-
-        return mapToResponse(session, host.getUsername());
+        // ✅ CORREGIDO: Extraer el host directamente de la relación
+        return mapToResponse(session, session.getHost().getUsername());
     }
-
 
     @Transactional
     public SessionResponse joinSession(JoinSessionRequest request) {
         GameSession session = sessionRepository.findBySessionCode(request.code())
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
+        // Validar si la sesión ya finalizó (Criterio de aceptación: 409 Conflict o similar)
+        if (session.getStatus() == SessionStatus.FINISHED) {
+            throw new IllegalStateException("No puedes unirte. La sesión ya ha finalizado.");
+        }
+
         Participant participant;
 
-        // CASO 1: Es Usuario Registrado (trae username)
         if (request.username() != null && !request.username().isBlank()) {
             User user = userRepository.findByUsername(request.username())
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
 
             var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
             if (existingParticipant.isPresent()) {
-                participant = existingParticipant.get(); // Reutilizar si ya existe
+                participant = existingParticipant.get(); 
+                // ✅ IMPORTANTE: Si el usuario vuelve a entrar, limpiamos el leftAt
+                participant.setLeftAt(null);
+                participant = participantRepository.save(participant);
             } else {
-                Participant.Role role = (session.getHostUserId() != null && session.getHostUserId().equals(user.getId())) 
+                // ✅ CORREGIDO: Comparar usando el ID del host de la relación
+                Participant.Role role = (session.getHost() != null && session.getHost().getId().equals(user.getId())) 
                         ? Participant.Role.HOST 
                         : Participant.Role.VOTER;
 
@@ -130,14 +135,14 @@ public class GameSessionService {
                 participant = participantRepository.save(participant);
             }
 
-        // CASO 2: Es Invitado (trae guestName)
         } else if (request.guestName() != null && !request.guestName().isBlank()) {
-            
-            // 🚀 Búsqueda de invitado existente para evitar duplicados en reconexión
             var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, request.guestName());
 
             if (existingGuest.isPresent()) {
-                participant = existingGuest.get(); // Reutilizar el invitado existente
+                participant = existingGuest.get(); 
+                // ✅ Limpiamos el leftAt si vuelve a entrar
+                participant.setLeftAt(null);
+                participant = participantRepository.save(participant);
             } else {
                 participant = Participant.builder()
                         .gameSession(session)
@@ -154,50 +159,49 @@ public class GameSessionService {
         }
 
         String hostName = getHostDisplayName(session);
-
         return mapToResponse(session, hostName);
     }
     
-    // Helper para obtener el nombre del Host sin asumir que es un User
+    // Helper para obtener el nombre del Host
     private String getHostDisplayName(GameSession session) {
-        if (session.getHostUserId() == null) {
+        // ✅ CORREGIDO: Usar la relación directa
+        if (session.getHost() == null) {
             return "Host Anónimo";
         }
-        return userRepository.findById(session.getHostUserId())
-                .map(User::getUsername)
-                .orElse("Host");
-        }
+        return session.getHost().getUsername();
+    }
 
     public List<Participant> getParticipants(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
+        // TODO (Optimización futura): Deberíamos filtrar a los participantes donde leftAt IS NULL
         return participantRepository.findAllByGameSession(session);
     }
 
+    @Transactional
     public SessionResponse leaveSession(UUID participantId, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
 
         Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameIsNotParticipantSessionException(
                 "Participante no encontrado"));
 
         if (!participant.getGameSession().getId().equals(session.getId())) {
-            throw new UsernameIsNotParticipantSessionException(
-                "El participante no pertenece a esta sesión");
-    }
-
-        if (participant.getRole() == Participant.Role.HOST) {
-            throw new InsufficientRoleException("El host no puede abandonar la session");
+            throw new UsernameIsNotParticipantSessionException("El participante no pertenece a esta sesión");
         }
 
-        participantRepository.delete(participant);
+        if (participant.getRole() == Participant.Role.HOST) {
+            throw new InsufficientRoleException("El host no puede abandonar la session. Debe finalizarla.");
+        }
 
-        User host = userRepository.findById(session.getHostUserId()).orElseThrow(() -> new HostNotFoundException("Host no encontrado"));
+        // ✅ REEMPLAZADO: Borrado lógico en lugar de físico
+        participant.setLeftAt(Instant.now());
+        participantRepository.save(participant);
 
-        return mapToResponse(session, host.getUsername());
+        // ✅ CORREGIDO
+        return mapToResponse(session, session.getHost().getUsername());
     }
 
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
+        // TODO (Optimización futura): Contar solo donde leftAt IS NULL
         long count = participantRepository.countByGameSession(session);
 
         UUID deckId = session.getDeck() != null ? session.getDeck().getId() : null;
@@ -217,34 +221,21 @@ public class GameSessionService {
         );
     }
 
-
-    // TODO: Cuando se implemente el historial de sesiones,
-    // reemplazar la eliminación por un cierre lógico (closedAt/status).
     @Transactional
     public void handleDisconnect(UUID participantId, String code) {
-        GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-
-        Participant participant = participantRepository.findById(participantId).orElseThrow(() -> new UsernameIsNotParticipantSessionException("Participante no encontrado"));
-
-        if (participant.getRole() == Participant.Role.HOST) {
-            // Si es el host, finalizar la sesión
-            deleteSession(code);
-        } else {
-            // Si no es el host, simplemente abandonar
+        // Como recomienda el issue, NO cerraremos la sesión automáticamente si el host se desconecta.
+        // Si el host sufre un corte de red, podrá volver a entrar a su sala porque sigue ACTIVE.
+        try {
             leaveSession(participantId, code);
+        } catch (InsufficientRoleException e) {
+            // Ignoramos si el host intenta hacer leave por desconexión, simplemente se queda "dentro"
+            log.info("El host se desconectó de la sesión {}. La sesión se mantiene activa.", code);
+        } catch (Exception e) {
+            log.warn("Error al manejar la desconexión del participante {}: {}", participantId, e.getMessage());
         }
     }
-
-        @Transactional
-        public void deleteSession(String code) {
-
-            GameSession session = sessionRepository.findBySessionCode(code)
-                    .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
-
-            sessionRepository.delete(session);
-        }
-
-            /* 
+    
+    // ✅ DESCOMENTADO Y REFACTORIZADO: Este es el nuevo método oficial para cerrar la sala
     @Transactional
     public SessionResponse finishSession(String username, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
@@ -258,12 +249,13 @@ public class GameSessionService {
             throw new InsufficientRoleException("Solo el host puede finalizar la session");
         }
 
-        //session.setStatus(SessionStatus.FINISHED);
+        // Cierre Lógico
+        session.setStatus(SessionStatus.FINISHED);
+        session.setClosedAt(Instant.now());
         sessionRepository.save(session);
-        participantRepository.deleteAllByGameSession(session);
+        
+        // Ya no eliminamos a los participantes, su historial queda intacto
 
         return mapToResponse(session, user.getUsername());
     }
-    */
-
 }

@@ -19,4 +19,11 @@ public interface VoteRepository extends JpaRepository<Vote, UUID> {
     List<Vote> findAllByTicket(Ticket ticket);
     void deleteAllByTicket(Ticket ticket);
     List<Vote> findAllByTicketId(UUID ticketId);
+
+    // Método para buscar el voto de un participante en una ronda específica
+    Optional<Vote> findByTicketAndParticipantAndRound(Ticket ticket, Participant participant, int round);
+
+    // Métodos para traer todos los votos de un ticket pero filtrados por la ronda actual
+    List<Vote> findAllByTicketAndRound(Ticket ticket, int round);
+    List<Vote> findAllByTicketIdAndRound(UUID ticketId, int round);
 }

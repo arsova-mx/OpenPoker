@@ -42,9 +42,10 @@ public class TicketService {
 
         Ticket ticket = Ticket.builder()
                 .id(UUID.randomUUID())
-                .tittle(dto.getTitle())
+                .tittle(dto.getTitle()) // Mantenemos tu typo original "tittle" para no romper tu entidad
                 .description(dto.getDescription())
                 .gameSession(session)
+                .currentRound(1) // NUEVO: Inicializar el ticket en la ronda 1
                 .build();
 
         Ticket savedTicket = ticketRepository.save(ticket);
@@ -54,7 +55,8 @@ public class TicketService {
             savedTicket.getTittle(),
             savedTicket.getDescription(),
             savedTicket.getGameSession().getId(),
-            savedTicket.getStatus()
+            savedTicket.getStatus(),
+            savedTicket.getCurrentRound()
         );
     }
 
@@ -74,7 +76,8 @@ public class TicketService {
                 updatedTicket.getTittle(),
                 updatedTicket.getDescription(),
                 updatedTicket.getGameSession().getId(),
-                updatedTicket.getStatus()
+                updatedTicket.getStatus(),
+                updatedTicket.getCurrentRound()
         );
     }
 
@@ -102,7 +105,8 @@ public class TicketService {
                 savedTicket.getTittle(),
                 savedTicket.getDescription(),
                 savedTicket.getGameSession().getId(),
-                savedTicket.getStatus()
+                savedTicket.getStatus(),
+                savedTicket.getCurrentRound()
         );
     }
 

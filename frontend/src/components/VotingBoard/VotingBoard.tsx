@@ -22,6 +22,8 @@ import type {
 // Extensión defensiva en caso de que el backend envíe ticketId en el payload
 interface ExtendedVotingRRAverageResponse extends VotingRRAverageResponse {
   ticketId?: string;
+  action?: string; // NUEVO: Para saber qué evento es (VOTES_RESET, etc)
+  newRound?: number; // NUEVO: Para poder actualizar la ronda visualmente
 }
 
 export default function VotingBoard() {
@@ -127,11 +129,33 @@ export default function VotingBoard() {
       }
     });
 
-    // 3. Suscripción a Resultados de Votación (Filtrada por ticketId)
+    // 3. Suscripción a Resultados de Votación / Control de Rondas (Filtrada por ticketId)
     const subVotes = subscribe<ExtendedVotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
         if (data.ticketId && activeTicket && data.ticketId !== activeTicket.id) {
           return;
+        }
+
+        // NUEVO: Manejar el evento de reset que envía el Backend
+        if (data.action === "VOTES_RESET") {
+          setSessionVotesData(null);
+          setSelectedCard(null);
+          setVoteStatusMap({});
+          
+          // Nos aseguramos de que newRound tenga un valor por defecto (ej. 1 si viniera vacío)
+          const updatedRound = data.newRound ?? 1;
+
+          setActiveTicket((prev) => (prev ? { ...prev, status: "VOTING", currentRound: updatedRound } : null));
+          
+          setTickets((prev) =>
+            prev.map((t) => {
+              // Usamos data.ticketId directamente
+              return t.id === data.ticketId ? { ...t, status: "VOTING", currentRound: updatedRound } : t;
+            })
+          );
+          
+          loadTickets();
+          return; 
         }
 
         if (data.revealed) {
@@ -619,7 +643,7 @@ export default function VotingBoard() {
 
           <div className="text-center my-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Estimando ({activeTicket.status}):
+              Estimando ({activeTicket.status}) • Ronda {activeTicket.currentRound || 1}:
             </span>
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
