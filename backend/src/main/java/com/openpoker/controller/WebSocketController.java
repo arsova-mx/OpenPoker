@@ -133,9 +133,9 @@ public class WebSocketController {
         }
     }
 
-    @MessageMapping("/session.vote")
+   @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
-        String inviteCode = payload.get("inviteCode");
+        String inviteCode = null;
 
         try {
             String cardValueStr = payload.get("cardValue");
@@ -149,7 +149,11 @@ public class WebSocketController {
             UUID ticketId = UUID.fromString(ticketIdStr);
 
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionRepository.findById(sessionInfo.sessionId()).orElseThrow().getSessionCode();
+            
+            // 👇 Obtenemos el inviteCode de forma segura desde la base de datos con el sessionId
+            inviteCode = sessionRepository.findById(sessionInfo.sessionId())
+                    .orElseThrow(() -> new RuntimeException("Sesión no encontrada"))
+                    .getSessionCode();
 
             voteService.submitVote(sessionInfo.sessionId(), ticketId, sessionInfo.participantId(), cardValue);
             
@@ -160,7 +164,9 @@ public class WebSocketController {
             log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
         } catch (RuntimeException ex) {
             log.error("💥 ERROR CRÍTICO AL VOTAR EN SALA [{}]:", inviteCode, ex);
-            publishError(inviteCode, "session.vote", ex);
+            if (inviteCode != null) {
+                publishError(inviteCode, "session.vote", ex);
+            }
         }
     }
 

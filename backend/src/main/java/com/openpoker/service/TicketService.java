@@ -1,5 +1,6 @@
 package com.openpoker.service;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -46,6 +47,7 @@ public class TicketService {
                 .description(dto.getDescription())
                 .gameSession(session)
                 .currentRound(1) // NUEVO: Inicializar el ticket en la ronda 1
+                .createdAt(Instant.now())
                 .build();
 
         Ticket savedTicket = ticketRepository.save(ticket);
