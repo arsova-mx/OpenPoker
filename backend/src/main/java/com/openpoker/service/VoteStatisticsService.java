@@ -18,11 +18,10 @@ public class VoteStatisticsService {
             return new VoteStatisticsDTO(0.0, 0.0, false, List.of());
         }
 
-        // 1. Filtrar solo votos numéricos válidos (weight > 0)
+        // 1. Filtrar solo votos numéricos: los comodines ("?", "☕") no tienen weight. La carta "0" sí cuenta.
         List<Vote> validVotes = votes.stream()
-            .filter(v -> v.getCardValue() != null 
-                      && v.getCardValue().getWeight() != null 
-                      && v.getCardValue().getWeight() > 0)
+            .filter(v -> v.getCardValue() != null
+                      && v.getCardValue().getWeight() != null)
             .toList();
 
         if (validVotes.isEmpty()) {

@@ -1,5 +1,6 @@
 package com.openpoker.security;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -12,8 +13,10 @@ import com.openpoker.globalexception.InvalidTokenException;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -26,6 +29,17 @@ public class JwtService {
 
     @Value("${jwt.expiration-ms}")
     private long expiration;
+
+    /** Vida de un token de invitado: dura lo que una sesión de estimación típica (12 h por defecto). */
+    @Value("${jwt.guest-expiration-ms:43200000}")
+    private long guestExpiration;
+
+    private static final String TOKEN_TYPE_CLAIM = "typ";
+    private static final String GUEST_TOKEN_TYPE = "guest";
+
+    /** Identidad de un invitado dentro de una única sala. */
+    public record GuestClaims(UUID participantId, String sessionCode, Instant expiresAt) {
+    }
 
     private SecretKey key;
 
@@ -111,12 +125,63 @@ public class JwtService {
         }
     }
 
+    public Instant extractExpiration(String token) {
+        Date expirationDate = Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .getExpiration();
+        return expirationDate == null ? null : expirationDate.toInstant();
+    }
+
+    /**
+     * Valida un token de USUARIO. Los tokens de invitado se rechazan aquí: solo sirven para
+     * identificar al invitado dentro de su sala por WebSocket, nunca para la API REST.
+     */
     public boolean validateToken(String token) {
         try {
-            extractUsername(token);
-            return true;
+            Claims claims = parseClaims(token);
+            return !GUEST_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class));
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** Emite un token para un invitado ligado a un participante y a una sala. */
+    public String generateGuestToken(UUID participantId, String sessionCode) {
+        return Jwts.builder()
+                .setSubject("guest:" + participantId)
+                .claim(TOKEN_TYPE_CLAIM, GUEST_TOKEN_TYPE)
+                .claim("pid", participantId.toString())
+                .claim("code", sessionCode)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + guestExpiration))
+                .signWith(getKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    /** Devuelve los datos del invitado si el token es un token de invitado válido y vigente. */
+    public Optional<GuestClaims> parseGuestToken(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            if (!GUEST_TOKEN_TYPE.equals(claims.get(TOKEN_TYPE_CLAIM, String.class))) {
+                return Optional.empty();
+            }
+            return Optional.of(new GuestClaims(
+                    UUID.fromString(claims.get("pid", String.class)),
+                    claims.get("code", String.class),
+                    claims.getExpiration().toInstant()));
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
     }
 }

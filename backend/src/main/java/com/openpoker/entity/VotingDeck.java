@@ -39,5 +39,6 @@ public class VotingDeck {
     private String description;
 
     @OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
     private List<CardValue> cardValues;
 }
