@@ -37,8 +37,6 @@ const normalizeTicket = (raw: RawTicketBackendResponse): TicketResponse => ({
   gameSessionId: raw.gameSessionId,
   status: raw.status,
   currentRound: raw.currentRound,
-  
-  
 });
 
 export const ticketService = {

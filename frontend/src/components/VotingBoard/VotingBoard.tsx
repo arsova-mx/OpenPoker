@@ -111,6 +111,26 @@ export default function VotingBoard() {
       });
   }, [code]);
 
+  // Carga inicial de tickets (definida antes para poder llamarla al montar)
+  const loadTickets = useCallback(async () => {
+    if (!session?.id) return;
+    try {
+      const data = await ticketService.getBySession(session.id);
+      setTickets(data);
+
+      setActiveTicket((prev) => {
+        if (!prev) {
+          const current = data.find((t) => t.status === "VOTING" || t.status === "REVEALED");
+          return current || null;
+        }
+        const serverTicket = data.find((t) => t.id === prev.id);
+        return serverTicket || prev;
+      });
+    } catch {
+      // Manejado por interceptor global
+    }
+  }, [session?.id]);
+
   // Suscripciones STOMP y Join seguro
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername) return;
@@ -136,25 +156,22 @@ export default function VotingBoard() {
           return;
         }
 
-        // NUEVO: Manejar el evento de reset que envía el Backend
+        // NUEVO: Manejar el evento de reset que envía el Backend de forma limpia y eficiente sin llamadas HTTP redundantes
         if (data.action === "VOTES_RESET") {
           setSessionVotesData(null);
           setSelectedCard(null);
           setVoteStatusMap({});
           
-          // Nos aseguramos de que newRound tenga un valor por defecto (ej. 1 si viniera vacío)
           const updatedRound = data.newRound ?? 1;
 
           setActiveTicket((prev) => (prev ? { ...prev, status: "VOTING", currentRound: updatedRound } : null));
           
           setTickets((prev) =>
             prev.map((t) => {
-              // Usamos data.ticketId directamente
               return t.id === data.ticketId ? { ...t, status: "VOTING", currentRound: updatedRound } : t;
             })
           );
           
-          loadTickets();
           return; 
         }
 
@@ -239,26 +256,6 @@ export default function VotingBoard() {
     setVoteStatusMap({});
     setSessionVotesData(null);
   }, [activeTicket?.id]);
-
-  // Carga inicial de tickets
-  const loadTickets = useCallback(async () => {
-    if (!session?.id) return;
-    try {
-      const data = await ticketService.getBySession(session.id);
-      setTickets(data);
-
-      setActiveTicket((prev) => {
-        if (!prev) {
-          const current = data.find((t) => t.status === "VOTING" || t.status === "REVEALED");
-          return current || null;
-        }
-        const serverTicket = data.find((t) => t.id === prev.id);
-        return serverTicket || prev;
-      });
-    } catch {
-      // Manejado por interceptor global
-    }
-  }, [session?.id]);
 
   useEffect(() => {
     loadTickets();

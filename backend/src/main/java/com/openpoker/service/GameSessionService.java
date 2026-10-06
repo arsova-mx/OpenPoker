@@ -62,7 +62,6 @@ public class GameSessionService {
         for (int attempt = 0; attempt < MAX_SESSION_CODE_RETRIES; attempt++) {
             String code = codeGenerator.generate();
             
-            // ✅ CORREGIDO: Se pasa la entidad User completa en 'host(user)'
             GameSession candidate = GameSession.builder()
                 .sessionCode(code)
                 .name(request.name())
@@ -93,7 +92,6 @@ public class GameSessionService {
 
     public SessionResponse getSessionByCode(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        // ✅ CORREGIDO: Extraer el host directamente de la relación
         return mapToResponse(session, session.getHost().getUsername());
     }
 
@@ -102,9 +100,9 @@ public class GameSessionService {
         GameSession session = sessionRepository.findBySessionCode(request.code())
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        // Validar si la sesión ya finalizó (Criterio de aceptación: 409 Conflict o similar)
+        // Validar si la sesión ya finalizó (Lanza un 409 Conflict mediante SessionFinishedException)
         if (session.getStatus() == SessionStatus.FINISHED) {
-            throw new IllegalStateException("No puedes unirte. La sesión ya ha finalizado.");
+            throw new SessionFinishedException("No puedes unirte. La sesión ya ha finalizado.");
         }
 
         Participant participant;
@@ -116,11 +114,9 @@ public class GameSessionService {
             var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
             if (existingParticipant.isPresent()) {
                 participant = existingParticipant.get(); 
-                // ✅ IMPORTANTE: Si el usuario vuelve a entrar, limpiamos el leftAt
                 participant.setLeftAt(null);
                 participant = participantRepository.save(participant);
             } else {
-                // ✅ CORREGIDO: Comparar usando el ID del host de la relación
                 Participant.Role role = (session.getHost() != null && session.getHost().getId().equals(user.getId())) 
                         ? Participant.Role.HOST 
                         : Participant.Role.VOTER;
@@ -140,7 +136,6 @@ public class GameSessionService {
 
             if (existingGuest.isPresent()) {
                 participant = existingGuest.get(); 
-                // ✅ Limpiamos el leftAt si vuelve a entrar
                 participant.setLeftAt(null);
                 participant = participantRepository.save(participant);
             } else {
@@ -162,9 +157,7 @@ public class GameSessionService {
         return mapToResponse(session, hostName);
     }
     
-    // Helper para obtener el nombre del Host
     private String getHostDisplayName(GameSession session) {
-        // ✅ CORREGIDO: Usar la relación directa
         if (session.getHost() == null) {
             return "Host Anónimo";
         }
@@ -173,7 +166,6 @@ public class GameSessionService {
 
     public List<Participant> getParticipants(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
-        // TODO (Optimización futura): Deberíamos filtrar a los participantes donde leftAt IS NULL
         return participantRepository.findAllByGameSession(session);
     }
 
@@ -192,16 +184,13 @@ public class GameSessionService {
             throw new InsufficientRoleException("El host no puede abandonar la session. Debe finalizarla.");
         }
 
-        // ✅ REEMPLAZADO: Borrado lógico en lugar de físico
         participant.setLeftAt(Instant.now());
         participantRepository.save(participant);
 
-        // ✅ CORREGIDO
         return mapToResponse(session, session.getHost().getUsername());
     }
 
     private SessionResponse mapToResponse(GameSession session, String hostUsername) {
-        // TODO (Optimización futura): Contar solo donde leftAt IS NULL
         long count = participantRepository.countByGameSession(session);
 
         UUID deckId = session.getDeck() != null ? session.getDeck().getId() : null;
@@ -223,19 +212,15 @@ public class GameSessionService {
 
     @Transactional
     public void handleDisconnect(UUID participantId, String code) {
-        // Como recomienda el issue, NO cerraremos la sesión automáticamente si el host se desconecta.
-        // Si el host sufre un corte de red, podrá volver a entrar a su sala porque sigue ACTIVE.
         try {
             leaveSession(participantId, code);
         } catch (InsufficientRoleException e) {
-            // Ignoramos si el host intenta hacer leave por desconexión, simplemente se queda "dentro"
             log.info("El host se desconectó de la sesión {}. La sesión se mantiene activa.", code);
         } catch (Exception e) {
             log.warn("Error al manejar la desconexión del participante {}: {}", participantId, e.getMessage());
         }
     }
     
-    // ✅ DESCOMENTADO Y REFACTORIZADO: Este es el nuevo método oficial para cerrar la sala
     @Transactional
     public SessionResponse finishSession(String username, String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
@@ -249,13 +234,10 @@ public class GameSessionService {
             throw new InsufficientRoleException("Solo el host puede finalizar la session");
         }
 
-        // Cierre Lógico
         session.setStatus(SessionStatus.FINISHED);
         session.setClosedAt(Instant.now());
         sessionRepository.save(session);
         
-        // Ya no eliminamos a los participantes, su historial queda intacto
-
         return mapToResponse(session, user.getUsername());
     }
 }

@@ -3,7 +3,6 @@ package com.openpoker.controller;
 import com.openpoker.dto.JoinSessionRequest;
 import com.openpoker.dto.SetTimerRequest;
 import com.openpoker.dto.TicketResponseDTO;
-import com.openpoker.dto.TimerStatusDTO;
 import com.openpoker.dto.VotingRRAverage;
 import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.Participant;
@@ -107,7 +106,7 @@ public class WebSocketController {
 
         } catch (RuntimeException ex) {
             log.error("Error en WebSocket join", ex);
-            publishError(inviteCode, "session.join", ex);
+            publishError(inviteCode, "session.join", ex, headerAccessor);
         }
     }
 
@@ -129,11 +128,11 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.leave", ex);
+            publishError(inviteCode, "session.leave", ex, headerAccessor);
         }
     }
 
-   @MessageMapping("/session.vote")
+    @MessageMapping("/session.vote")
     public void vote(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = null;
 
@@ -150,7 +149,6 @@ public class WebSocketController {
 
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
             
-            // 👇 Obtenemos el inviteCode de forma segura desde la base de datos con el sessionId
             inviteCode = sessionRepository.findById(sessionInfo.sessionId())
                     .orElseThrow(() -> new RuntimeException("Sesión no encontrada"))
                     .getSessionCode();
@@ -164,9 +162,7 @@ public class WebSocketController {
             log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
         } catch (RuntimeException ex) {
             log.error("💥 ERROR CRÍTICO AL VOTAR EN SALA [{}]:", inviteCode, ex);
-            if (inviteCode != null) {
-                publishError(inviteCode, "session.vote", ex);
-            }
+            publishError(inviteCode, "session.vote", ex, headerAccessor);
         }
     }
 
@@ -191,7 +187,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.reveal", ex);
+            publishError(inviteCode, "session.reveal", ex, headerAccessor);
         }
     }
 
@@ -208,12 +204,10 @@ public class WebSocketController {
             UUID ticketId = UUID.fromString(ticketIdStr);
 
             WebSocketSessionRegistry.SessionInfo sessionInfo = getRequiredSessionInfo(headerAccessor);
-            inviteCode = sessionInfo.inviteCode(); // 🔒 Siempre usar la sala registrada y autenticada
+            inviteCode = sessionInfo.inviteCode();
 
-            // 1. Resetear votos en la base de datos
             voteService.resetVotes(sessionInfo.sessionId(), ticketId, sessionInfo.participantId());
 
-            // 2. Notificar que los votos y estadísticas quedan vacíos
             VotingRRAverage resetVotesPayload = new VotingRRAverage(
                 inviteCode,
                 List.of(),
@@ -223,11 +217,8 @@ public class WebSocketController {
                 null
             );
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/votes", resetVotesPayload);
-
-            // 3. Regresar todos los indicadores de voto al reloj de espera
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", (Object) Collections.emptyMap());
 
-            // 4. Notificar que el ticket regresó a estado VOTING
             final String finalInviteCode = inviteCode;
             ticketRepository.findById(ticketId).ifPresent(ticket -> {
                 TicketResponseDTO ticketDto = new TicketResponseDTO(
@@ -245,7 +236,7 @@ public class WebSocketController {
 
         } catch (RuntimeException ex) {
             log.error("Error en session.reset-votes para sala: {}", inviteCode, ex);
-            publishError(inviteCode, "session.reset-votes", ex);
+            publishError(inviteCode, "session.reset-votes", ex, headerAccessor);
         }
     }
 
@@ -269,7 +260,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/ticket-updated", ticketResponse);
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "ticket.finish", ex);
+            publishError(inviteCode, "ticket.finish", ex, headerAccessor);
         }
     }
 
@@ -308,18 +299,28 @@ public class WebSocketController {
         return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
-    private void publishError(String inviteCode, String action, RuntimeException ex) {
-        if (inviteCode == null || inviteCode.isBlank()) {
-            return;
-        }
-
+    private void publishError(String inviteCode, String action, RuntimeException ex, SimpMessageHeaderAccessor headerAccessor) {
         String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-
-        messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) Map.of(
+        Map<String, Object> errorPayload = Map.of(
                 "action", action,
                 "type", ex.getClass().getSimpleName(),
                 "message", message
-        ));
+        );
+
+        if (inviteCode != null && !inviteCode.isBlank()) {
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", errorPayload);
+        }
+
+        try {
+            String username = resolveUsernameOrNull(headerAccessor);
+            if (username != null) {
+                messagingTemplate.convertAndSendToUser(username, "/queue/errors", errorPayload);
+            } else if (headerAccessor != null && headerAccessor.getUser() != null) {
+                messagingTemplate.convertAndSendToUser(headerAccessor.getUser().getName(), "/queue/errors", errorPayload);
+            }
+        } catch (Exception e) {
+            log.warn("No se pudo enviar el error por canal privado al usuario", e);
+        }
     }
 
     @MessageMapping("/session.set-timer")
@@ -350,7 +351,7 @@ public class WebSocketController {
             );
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.set-timer", ex);
+            publishError(inviteCode, "session.set-timer", ex, headerAccessor);
         }
     }
 }
