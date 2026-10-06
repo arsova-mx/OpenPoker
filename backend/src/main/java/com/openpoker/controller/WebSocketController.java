@@ -14,7 +14,6 @@ import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
-import com.openpoker.security.StompAuthChannelInterceptor;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.TicketService;
 import com.openpoker.service.TicketTimerService;
@@ -26,7 +25,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,13 +52,14 @@ public class WebSocketController {
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
+        String guestName = payload.get("guestName");
         UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
         try {
             String username = resolveUsernameOrNull(headerAccessor);
             var session = sessionRepository.findBySessionCode(inviteCode)
                     .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
             
-            // 🔒 Validación obligatoria para evitar que participantes viejos entren a salas finalizadas
+            // 🔒 Validación obligatoria para evitar que entren a salas finalizadas
             service.validateSessionIsActive(session);
             
             Participant participant;
@@ -77,10 +76,18 @@ public class WebSocketController {
                     service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
+            } else if (guestName != null && !guestName.isBlank()) {
+                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName);
+
+                if (existingGuest.isPresent()) {
+                    participant = existingGuest.get();
+                } else {
+                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, guestName);
+                    service.joinSession(joinRequest);
+                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName).orElseThrow();
+                }
             } else {
-                // Invitado: se identifica por el token emitido en POST /api/sessions/{code}/guests,
-                // nunca por el nombre (antes cualquiera con el nombre de un invitado tomaba su lugar).
-                participant = resolveGuestParticipant(headerAccessor, session);
+                throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
             }
 
             sessionRegistry.register(
@@ -260,7 +267,6 @@ public class WebSocketController {
         } catch (RuntimeException ex) {
             publishError(inviteCode, "ticket.finish", ex, headerAccessor);
         }
-        return participant;
     }
 
     private List<WebSocketParticipantResponse> mapParticipants(List<Participant> participants) {
@@ -302,7 +308,7 @@ public class WebSocketController {
         String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
         Map<String, Object> errorPayload = Map.of(
                 "action", action,
-                "code", errorCode(ex, expected),
+                "type", ex.getClass().getSimpleName(),
                 "message", message
         );
 
