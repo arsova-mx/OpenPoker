@@ -14,9 +14,23 @@ export function getTokenDuration() {
     return duration;
 }
 
-export function getAuthToken() {
-    
+/**
+ * Token guardado en localStorage, descartando valores inválidos como "undefined" o "null"
+ * que pudieron quedar de versiones anteriores del registro.
+ */
+export function readStoredToken(): string | null {
     const token = localStorage.getItem('token');
+
+    if (!token || token === 'undefined' || token === 'null') {
+        return null;
+    }
+
+    return token;
+}
+
+export function getAuthToken() {
+
+    const token = readStoredToken();
 
     if (!token) {
         return null

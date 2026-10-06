@@ -10,6 +10,7 @@ import com.openpoker.entity.Ticket;
 import com.openpoker.entity.TicketStatus;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.TicketRepository;
+import com.openpoker.service.SessionAccessService;
 import com.openpoker.service.TicketService;
 
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class TicketController {
     private final TicketRepository ticketRepository;
     private final GameSessionRepository sessionRepository;
     private final TicketService ticketService;
+    private final SessionAccessService sessionAccessService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping
@@ -54,9 +56,13 @@ public class TicketController {
         return ResponseEntity.ok(response);
     }
 
-    // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala
+    // 🚀 GET /api/tickets/session/{sessionId} -> Traer el backlog de la sala (solo participantes)
     @GetMapping("/session/{sessionId}")
-    public ResponseEntity<List<TicketResponseDTO>> getTicketsBySession(@PathVariable UUID sessionId) {
+    public ResponseEntity<List<TicketResponseDTO>> getTicketsBySession(
+            @AuthenticationPrincipal String username,
+            @PathVariable UUID sessionId) {
+        sessionAccessService.requireParticipant(sessionId, username);
+
         List<Ticket> tickets = ticketRepository.findByGameSessionId(sessionId);
 
         List<TicketResponseDTO> response = tickets.stream()

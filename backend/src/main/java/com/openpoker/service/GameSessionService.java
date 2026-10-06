@@ -158,7 +158,7 @@ public class GameSessionService {
             }
 
         } else {
-            throw new IllegalArgumentException("Debe proporcionar un usuario registrado o un nombre de invitado.");
+            throw new IllegalArgumentException("Se requiere un usuario autenticado para unirse con este endpoint.");
         }
 
         String hostName = getHostDisplayName(session);

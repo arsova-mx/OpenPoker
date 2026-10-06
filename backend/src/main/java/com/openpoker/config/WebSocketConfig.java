@@ -15,17 +15,22 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final StompAuthChannelInterceptor stompAuthChannelInterceptor;
+    private final CorsProperties corsProperties;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic"); // broadcast
+        // /topic: broadcast a la sala. /queue: mensajes privados por conexión (vía /user/queue/...)
+        config.enableSimpleBroker("/topic", "/queue");
         config.setApplicationDestinationPrefixes("/app"); // cliente -> servidor
+        config.setUserDestinationPrefix("/user");
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws-native").setAllowedOriginPatterns("*");
-        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+        // Mismos orígenes que CORS. Con la lista vacía solo se acepta el mismo origen.
+        String[] allowedOrigins = corsProperties.allowedOrigins().toArray(String[]::new);
+        registry.addEndpoint("/ws-native").setAllowedOriginPatterns(allowedOrigins);
+        registry.addEndpoint("/ws").setAllowedOriginPatterns(allowedOrigins).withSockJS();
     }
 
     @Override

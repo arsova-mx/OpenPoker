@@ -222,7 +222,9 @@ public class VoteService {
         }
 
         CardValue suggested = null;
-        if (activeDeck != null && statistics.average() > 0) {
+        boolean hasNumericVotes = votes.stream()
+                .anyMatch(v -> v.getCardValue() != null && v.getCardValue().getWeight() != null);
+        if (activeDeck != null && hasNumericVotes) {
             suggested = cardValueRepository.findClosestByWeight(
                 activeDeck.getId().toString(), 
                 statistics.average()
