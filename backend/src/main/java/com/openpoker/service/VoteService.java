@@ -50,6 +50,11 @@ public class VoteService {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
+        // 🔒 Validación: No permitir votos si la sesión ya finalizó
+        if (session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionFinishedException("La sesión ya ha finalizado. No se permiten más votos ni interacciones.");
+        }
+
         Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
         .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
@@ -99,9 +104,6 @@ public class VoteService {
                     .build();
             savedVote = voteRepository.saveAndFlush(vote);
         }
-
-        // OPCIONAL: Si quieres avisar en tiempo real que alguien votó (sin revelar el valor)
-        // messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/votes", "NEW_VOTE");
 
         return new VoteResponse(
                 savedVote.getId(),
@@ -176,6 +178,12 @@ public class VoteService {
     public VotingRRAverage revealVotes(UUID sessionId, UUID participantId, UUID ticketId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+        // 🔒 Validación: No permitir revelar si la sesión ya finalizó
+        if (session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionFinishedException("La sesión ya ha finalizado. No se permiten más interacciones.");
+        }
+
         Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
         .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
@@ -239,9 +247,6 @@ public class VoteService {
                 statistics
         );
 
-        // OPCIONAL: Enviar evento por WebSocket de que se revelaron los votos
-        // messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/reveal", result);
-
         return result;
     }
 
@@ -280,6 +285,12 @@ public class VoteService {
     public void resetVotes(UUID sessionId, UUID ticketId, UUID participantId) {
         GameSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
+
+        // 🔒 Validación: No permitir resetear rondas si la sesión ya finalizó
+        if (session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionFinishedException("La sesión ya ha finalizado. No se permiten más interacciones.");
+        }
+
         Ticket ticket = ticketRepository.findByIdAndGameSessionId(ticketId, sessionId)
             .orElseThrow(() -> new IllegalArgumentException("El ticket no existe o no pertenece a la sesión proporcionada"));
 
@@ -306,8 +317,6 @@ public class VoteService {
         ticketRepository.save(ticket);
         sessionRepository.save(session);
 
-        // NUEVO: WEBSOCKET - Enviar la notificación al cliente
-        // Cambia el string del destino ("topic/session/...") al formato que use tu controlador WebSocket
         Map<String, Object> payload = new HashMap<>();
         payload.put("action", "VOTES_RESET");
         payload.put("ticketId", ticket.getId());

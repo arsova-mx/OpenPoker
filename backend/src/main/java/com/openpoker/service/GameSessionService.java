@@ -100,8 +100,8 @@ public class GameSessionService {
      * Si está finalizada, lanza SessionFinishedException (mapeada a HTTP 409 Conflict).
      */
     public void validateSessionIsActive(GameSession session) {
-        if (session.getStatus() == SessionStatus.FINISHED) {
-            throw new SessionFinishedException("La sesión ya ha finalizado y no permite uniones ni nuevas interacciones.");
+        if (session == null || session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionFinishedException("La sesión ya ha finalizado y no permite nuevas interacciones.");
         }
     }
 
