@@ -57,6 +57,9 @@ public class WebSocketController {
             var session = sessionRepository.findBySessionCode(inviteCode)
                     .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
             
+            // 🔒 Validación obligatoria para evitar que participantes viejos entren a salas finalizadas
+            service.validateSessionIsActive(session);
+            
             Participant participant;
 
             if (username != null) {

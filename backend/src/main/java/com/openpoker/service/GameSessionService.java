@@ -95,15 +95,23 @@ public class GameSessionService {
         return mapToResponse(session, session.getHost().getUsername());
     }
 
+    /**
+     * 🔒 Método centralizado para validar que la sesión se encuentre activa.
+     * Si está finalizada, lanza SessionFinishedException (mapeada a HTTP 409 Conflict).
+     */
+    public void validateSessionIsActive(GameSession session) {
+        if (session.getStatus() == SessionStatus.FINISHED) {
+            throw new SessionFinishedException("La sesión ya ha finalizado y no permite uniones ni nuevas interacciones.");
+        }
+    }
+
     @Transactional
     public SessionResponse joinSession(JoinSessionRequest request) {
         GameSession session = sessionRepository.findBySessionCode(request.code())
                 .orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
 
-        // Validar si la sesión ya finalizó (Lanza un 409 Conflict mediante SessionFinishedException)
-        if (session.getStatus() == SessionStatus.FINISHED) {
-            throw new SessionFinishedException("No puedes unirte. La sesión ya ha finalizado.");
-        }
+        // Validar estado de la sesión usando el método centralizado
+        validateSessionIsActive(session);
 
         Participant participant;
 
