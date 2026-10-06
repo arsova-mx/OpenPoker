@@ -1,6 +1,6 @@
 package com.openpoker.support;
 
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper; // ✅ Correcto
 
 import java.io.IOException;
 import java.net.URI;
