@@ -1,7 +1,6 @@
 package com.openpoker.service;
 
 import com.openpoker.entity.*;
-import com.openpoker.entity.SessionStatus;
 import com.openpoker.globalexception.*;
 import com.openpoker.model.CardSeries;
 import com.openpoker.repository.VotingDeckRepository;
@@ -89,7 +88,7 @@ public class GameSessionService {
 
         return mapToResponse(session, user.getUsername());
     }
-
+    @Transactional
     public SessionResponse getSessionByCode(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
         return mapToResponse(session, session.getHost().getUsername());
@@ -171,7 +170,7 @@ public class GameSessionService {
         }
         return session.getHost().getUsername();
     }
-
+    @Transactional
     public List<Participant> getParticipants(String code) {
         GameSession session = sessionRepository.findBySessionCode(code).orElseThrow(() -> new SessionNotFoundException("Session no encontrada"));
         return participantRepository.findAllByGameSession(session);

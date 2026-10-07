@@ -8,6 +8,8 @@ import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
+import com.openpoker.globalexception.InsufficientRoleException;
+import com.openpoker.globalexception.OnlyHostCanRevealVotesException;
 import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
@@ -21,6 +23,7 @@ import com.openpoker.service.VoteService;
 import com.openpoker.service.WebSocketSessionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -49,22 +52,40 @@ public class WebSocketController {
     private final TicketService ticketService;
     private final TicketTimerService ticketTimerService;
 
+    
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
+        
         String guestName = payload.get("guestName");
+        if (guestName == null || guestName.isBlank()) guestName = payload.get("guest");
+        if (guestName == null || guestName.isBlank()) guestName = payload.get("name");
+
         UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
+        
         try {
-            String username = resolveUsernameOrNull(headerAccessor);
+            // Determinamos el usuario o invitado de forma limpia sin reasignar variables libres
+            String tempUser = resolveUsernameOrNull(headerAccessor);
+            if (tempUser == null && headerAccessor.getUser() != null) {
+                tempUser = headerAccessor.getUser().getName();
+            }
+
+            if ((guestName == null || guestName.isBlank()) && tempUser != null && (tempUser.startsWith("guest") || tempUser.startsWith("guesthost"))) {
+                guestName = tempUser;
+                tempUser = null;
+            }
+
+            final String username = tempUser;
+            final String targetGuestName = guestName;
+
             var session = sessionRepository.findBySessionCode(inviteCode)
                     .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
             
-            // 🔒 Validación obligatoria para evitar que entren a salas finalizadas
             service.validateSessionIsActive(session);
             
             Participant participant;
 
-            if (username != null) {
+            if (username != null && !username.isBlank()) {
                 User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
                 var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
@@ -76,15 +97,15 @@ public class WebSocketController {
                     service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
-            } else if (guestName != null && !guestName.isBlank()) {
-                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName);
+            } else if (targetGuestName != null && !targetGuestName.isBlank()) {
+                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuestName);
 
                 if (existingGuest.isPresent()) {
                     participant = existingGuest.get();
                 } else {
-                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, guestName);
+                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, targetGuestName);
                     service.joinSession(joinRequest);
-                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, guestName).orElseThrow();
+                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuestName).orElseThrow();
                 }
             } else {
                 throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
@@ -105,8 +126,6 @@ public class WebSocketController {
 
             if (ticketId != null) {
                 messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(session.getId(), ticketId));
-            } else {
-                log.info("No se envía vote-status porque no hay un ticketId seleccionado en el payload de unión.");
             }
 
         } catch (RuntimeException ex) {
@@ -305,23 +324,37 @@ public class WebSocketController {
     }
 
     private void publishError(String inviteCode, String action, RuntimeException ex, SimpMessageHeaderAccessor headerAccessor) {
-        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        String message = ex.getMessage() != null ? ex.getMessage() : "Error interno";
+        
+        String errorType = "BUSINESS_ERROR";
+        if (ex instanceof IllegalArgumentException) {
+            errorType = "BAD_REQUEST";
+        } else if (ex instanceof SessionNotFoundException) {
+            errorType = "NOT_FOUND";
+        }
+
         Map<String, Object> errorPayload = Map.of(
                 "action", action,
-                "type", ex.getClass().getSimpleName(),
+                "type", errorType,
                 "message", message
         );
 
-        if (inviteCode != null && !inviteCode.isBlank()) {
+        // Enviar al tópico público solo si NO es una excepción de seguridad/privacidad estricta
+        if (inviteCode != null && !inviteCode.isBlank() && 
+            !(ex instanceof OnlyHostCanRevealVotesException || ex instanceof InsufficientRoleException)) {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", errorPayload);
         }
 
+        // Siempre enviar el error al canal privado del usuario afectado
         try {
             String username = resolveUsernameOrNull(headerAccessor);
             if (username != null) {
                 messagingTemplate.convertAndSendToUser(username, "/queue/errors", errorPayload);
             } else if (headerAccessor != null && headerAccessor.getUser() != null) {
                 messagingTemplate.convertAndSendToUser(headerAccessor.getUser().getName(), "/queue/errors", errorPayload);
+            } else if (headerAccessor != null && headerAccessor.getSessionId() != null) {
+                // Fallback usando el sessionId si el usuario anónimo no tiene principal directo
+                messagingTemplate.convertAndSendToUser(headerAccessor.getSessionId(), "/queue/errors", errorPayload);
             }
         } catch (Exception e) {
             log.warn("No se pudo enviar el error por canal privado al usuario", e);

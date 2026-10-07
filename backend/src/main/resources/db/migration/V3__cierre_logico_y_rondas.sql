@@ -20,12 +20,12 @@ ALTER TABLE ticket ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT
 ALTER TABLE ticket ADD COLUMN position INTEGER;
 ALTER TABLE ticket ADD COLUMN current_round INTEGER DEFAULT 1 NOT NULL;
 ALTER TABLE ticket ADD COLUMN finished_at TIMESTAMP;
-ALTER TABLE ticket ADD COLUMN estimated_card_id VARCHAR(36); 
+--ALTER TABLE ticket ADD COLUMN estimated_card_id VARCHAR(36); 
 
-ALTER TABLE ticket ADD CONSTRAINT fk_ticket_estimated_card FOREIGN KEY (estimated_card_id) REFERENCES card_value(id);
+--ALTER TABLE ticket ADD CONSTRAINT fk_ticket_estimated_card FOREIGN KEY (estimated_card_id) REFERENCES card_value(id);
 
 -- 4. Actualizaciones en VOTES
-ALTER TABLE votes DROP INDEX UK974vwejdcfaredqjkvwiow98j; 
+--ALTER TABLE votes DROP INDEX UK974vwejdcfaredqjkvwiow98j; 
 
 ALTER TABLE votes ADD COLUMN round INTEGER DEFAULT 1 NOT NULL;
 
