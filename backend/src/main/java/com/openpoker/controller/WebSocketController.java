@@ -52,11 +52,10 @@ public class WebSocketController {
     private final TicketService ticketService;
     private final TicketTimerService ticketTimerService;
 
-    
+
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
-        
         String guestName = payload.get("guestName");
         if (guestName == null || guestName.isBlank()) guestName = payload.get("guest");
         if (guestName == null || guestName.isBlank()) guestName = payload.get("name");
@@ -64,19 +63,12 @@ public class WebSocketController {
         UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
         
         try {
-            // Determinamos el usuario o invitado de forma limpia sin reasignar variables libres
+            // Usamos una variable temporal para resolver el usuario sin romper la regla de efectividad final
             String tempUser = resolveUsernameOrNull(headerAccessor);
             if (tempUser == null && headerAccessor.getUser() != null) {
                 tempUser = headerAccessor.getUser().getName();
             }
-
-            if ((guestName == null || guestName.isBlank()) && tempUser != null && (tempUser.startsWith("guest") || tempUser.startsWith("guesthost"))) {
-                guestName = tempUser;
-                tempUser = null;
-            }
-
-            final String username = tempUser;
-            final String targetGuestName = guestName;
+            final String username = tempUser; // Declarada como efectivamente final
 
             var session = sessionRepository.findBySessionCode(inviteCode)
                     .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
@@ -85,7 +77,7 @@ public class WebSocketController {
             
             Participant participant;
 
-            if (username != null && !username.isBlank()) {
+            if (username != null && !username.isBlank() && !username.startsWith("guest")) {
                 User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
                 var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
@@ -97,18 +89,21 @@ public class WebSocketController {
                     service.joinSession(joinRequest);
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
-            } else if (targetGuestName != null && !targetGuestName.isBlank()) {
-                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuestName);
+            } else {
+                String targetGuest = (guestName != null && !guestName.isBlank()) ? guestName : username;
+                if (targetGuest == null || targetGuest.isBlank()) {
+                    throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
+                }
+
+                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuest);
 
                 if (existingGuest.isPresent()) {
                     participant = existingGuest.get();
                 } else {
-                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, targetGuestName);
+                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, targetGuest);
                     service.joinSession(joinRequest);
-                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuestName).orElseThrow();
+                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuest).orElseThrow();
                 }
-            } else {
-                throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
             }
 
             sessionRegistry.register(
