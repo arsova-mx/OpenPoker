@@ -8,6 +8,7 @@ export interface TicketResponse {
   description?: string;
   gameSessionId: string;
   status: TicketStatus;
+  currentRound: number; // 👈 Agrégale esta línea aquí
 }
 
 export interface CreateTicketRequest {
@@ -24,6 +25,7 @@ interface RawTicketBackendResponse {
   description?: string;
   gameSessionId: string;
   status: TicketStatus;
+  currentRound: number;
 }
 
 // Normaliza posibles inconsistencias de nombre de campo (title vs tittle)
@@ -34,6 +36,7 @@ const normalizeTicket = (raw: RawTicketBackendResponse): TicketResponse => ({
   description: raw.description,
   gameSessionId: raw.gameSessionId,
   status: raw.status,
+  currentRound: raw.currentRound,
 });
 
 export const ticketService = {

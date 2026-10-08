@@ -1,6 +1,7 @@
 package com.openpoker.support;
 
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.net.URI;
@@ -38,7 +39,11 @@ public class ApiTestClient {
 
         @SuppressWarnings("unchecked")
         public Map<String, Object> asMap() {
-            return json.readValue(body, Map.class);
+            try {
+                return json.readValue(body, Map.class);
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("Error al deserializar la respuesta a Map", e);
+            }
         }
 
         public String field(String name) {
@@ -62,15 +67,20 @@ public class ApiTestClient {
                 request.header("Authorization", "Bearer " + token);
             }
             extraHeaders.forEach(request::header);
-            HttpRequest.BodyPublisher publisher = body == null
+            
+            String jsonBody = body == null ? null : json.writeValueAsString(body);
+            HttpRequest.BodyPublisher publisher = jsonBody == null
                     ? HttpRequest.BodyPublishers.noBody()
-                    : HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body));
+                    : HttpRequest.BodyPublishers.ofString(jsonBody);
+            
             request.method(method, publisher);
 
             HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
             return new Response(response.statusCode(), response.body(), json, response.headers().map());
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Error al serializar el cuerpo de la petición a JSON", e);
         } catch (IOException e) {
-            throw new IllegalStateException("Fallo la petición " + method + " " + path, e);
+            throw new IllegalStateException("Falló la petición " + method + " " + path, e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);

@@ -10,7 +10,10 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "votes", uniqueConstraints = @UniqueConstraint(columnNames = {"ticket_id", "participant_id"}))
+// ✅ 1. Actualizamos el constraint para incluir 'round' y le damos un nombre explícito
+@Table(name = "votes", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_vote_ticket_participant_round", columnNames = {"ticket_id", "participant_id", "round"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,7 +22,7 @@ import org.hibernate.type.SqlTypes;
 public class Vote {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    @JdbcTypeCode(SqlTypes.VARCHAR) // ESTO ES LA CLAVE
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(length = 36)
     private UUID id;
 
@@ -35,6 +38,10 @@ public class Vote {
     @JoinColumn(name = "card_value_id", nullable = false)
     private CardValue cardValue;
 
+    // ✅ 2. Agregamos el campo de la ronda
+    @Column(nullable = false)
+    private Integer round;
+
     private Timestamp createdAt;
     private Timestamp updatedAt;
 
@@ -42,11 +49,14 @@ public class Vote {
     public void prePersist() {
         createdAt = new Timestamp(System.currentTimeMillis());
         updatedAt = new Timestamp(System.currentTimeMillis());
+        // Inicializamos round por defecto en 1 si no se envía
+        if (this.round == null) {
+            this.round = 1;
+        }
     }
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = new Timestamp(System.currentTimeMillis());
     }
-
 }

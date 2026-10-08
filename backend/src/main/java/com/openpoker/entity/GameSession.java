@@ -1,6 +1,7 @@
 package com.openpoker.entity;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.UUID;
 
 import org.hibernate.annotations.JdbcTypeCode;
@@ -14,7 +15,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "game_sessions")
+@Table(name = "game_sessions", indexes = {
+    @Index(name = "idx_session_host_created", columnList = "host_id, created_at")
+})
 @Getter
 @Setter
 @AllArgsConstructor
@@ -32,9 +35,16 @@ public class GameSession {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "host_id", nullable = false,length = 36)
-    @JdbcTypeCode(SqlTypes.VARCHAR)
-    private UUID hostUserId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "host_id", nullable = false)
+    private User host;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private SessionStatus status = SessionStatus.ACTIVE;
+
+    @Column(name = "closed_at")
+    private Instant closedAt;
 
 
     private Timestamp createdAt;

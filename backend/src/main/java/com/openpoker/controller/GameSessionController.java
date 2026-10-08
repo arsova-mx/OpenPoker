@@ -57,11 +57,18 @@ public class GameSessionController {
      */
     @PostMapping("/{code}/guests")
     public ResponseEntity<GuestJoinResponse> joinAsGuest(@PathVariable String code, @RequestBody @Valid GuestJoinRequest request) {
-        Participant guest = gameSessionService.joinAsGuest(code, request.guestName());
-        String guestToken = jwtService.generateGuestToken(guest.getId(), guest.getGameSession().getSessionCode());
+        SessionResponse sessionResp = gameSessionService.joinSession(new JoinSessionRequest(code, null, request.guestName()));
+        
+        // Buscamos al participante recién creado o reutilizado
+        Participant guest = gameSessionService.getParticipants(code).stream()
+                .filter(p -> request.guestName().equals(p.getGuestDisplayName()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No se pudo registrar al invitado"));
+
+        String guestToken = jwtService.generateGuestToken(guest.getId(), code);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new GuestJoinResponse(
-                gameSessionService.getSessionResponse(guest.getGameSession()),
+                sessionResp,
                 guest.getId(),
                 guest.getGuestDisplayName(),
                 guestToken));
@@ -71,6 +78,4 @@ public class GameSessionController {
     public List<VotingDeckResponse> getAllDecks() {
         return cardDeckService.getAllDecks();
     }
-
 }
-

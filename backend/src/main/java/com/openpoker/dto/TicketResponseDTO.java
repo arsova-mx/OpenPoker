@@ -9,7 +9,9 @@ public record TicketResponseDTO(
     String title, 
     String description, 
     UUID gameSessionId, // Solo enviamos el ID de la sesión, no el objeto entero
-    TicketStatus status
+    TicketStatus status,
+    int currentRound // NUEVO: Exponemos la ronda actual al frontend
+
 ) {
 
 }

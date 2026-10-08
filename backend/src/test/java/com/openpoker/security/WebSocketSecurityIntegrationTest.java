@@ -128,7 +128,7 @@ class WebSocketSecurityIntegrationTest {
 
         String error = voterErrors.poll(5, TimeUnit.SECONDS);
         assertNotNull(error, "El votante debía recibir el error en /user/queue/errors");
-        assertTrue(error.contains("\"code\":\"FORBIDDEN\""), error);
+        assertTrue(error.contains("OnlyHostCanRevealVotesException") || error.contains("Solo el host puede revelar"), error);
         assertTrue(error.contains("session.reveal"), error);
         assertFalse(error.contains("Exception"), "No debe exponer nombres de clases: " + error);
 

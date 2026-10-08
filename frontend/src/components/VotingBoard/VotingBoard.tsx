@@ -23,6 +23,8 @@ import type {
 // Extensión defensiva en caso de que el backend envíe ticketId en el payload
 interface ExtendedVotingRRAverageResponse extends VotingRRAverageResponse {
   ticketId?: string;
+  action?: string; // NUEVO: Para saber qué evento es (VOTES_RESET, etc)
+  newRound?: number; // NUEVO: Para poder actualizar la ronda visualmente
 }
 
 export default function VotingBoard() {
@@ -133,6 +135,26 @@ export default function VotingBoard() {
     };
   }, [wsConnected, subscribe]);
 
+  // Carga inicial de tickets (definida antes para poder llamarla al montar)
+  const loadTickets = useCallback(async () => {
+    if (!session?.id) return;
+    try {
+      const data = await ticketService.getBySession(session.id);
+      setTickets(data);
+
+      setActiveTicket((prev) => {
+        if (!prev) {
+          const current = data.find((t) => t.status === "VOTING" || t.status === "REVEALED");
+          return current || null;
+        }
+        const serverTicket = data.find((t) => t.id === prev.id);
+        return serverTicket || prev;
+      });
+    } catch {
+      // Manejado por interceptor global
+    }
+  }, [session?.id]);
+
   // Suscripciones STOMP y Join seguro
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername || !isJoined) return;
@@ -151,11 +173,30 @@ export default function VotingBoard() {
       }
     });
 
-    // 3. Suscripción a Resultados de Votación (Filtrada por ticketId)
+    // 3. Suscripción a Resultados de Votación / Control de Rondas (Filtrada por ticketId)
     const subVotes = subscribe<ExtendedVotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
         if (data.ticketId && activeTicket && data.ticketId !== activeTicket.id) {
           return;
+        }
+
+        // NUEVO: Manejar el evento de reset que envía el Backend de forma limpia y eficiente sin llamadas HTTP redundantes
+        if (data.action === "VOTES_RESET") {
+          setSessionVotesData(null);
+          setSelectedCard(null);
+          setVoteStatusMap({});
+          
+          const updatedRound = data.newRound ?? 1;
+
+          setActiveTicket((prev) => (prev ? { ...prev, status: "VOTING", currentRound: updatedRound } : null));
+          
+          setTickets((prev) =>
+            prev.map((t) => {
+              return t.id === data.ticketId ? { ...t, status: "VOTING", currentRound: updatedRound } : t;
+            })
+          );
+          
+          return; 
         }
 
         if (data.revealed) {
@@ -235,26 +276,6 @@ export default function VotingBoard() {
     setVoteStatusMap({});
     setSessionVotesData(null);
   }, [activeTicket?.id]);
-
-  // Carga inicial de tickets
-  const loadTickets = useCallback(async () => {
-    if (!session?.id) return;
-    try {
-      const data = await ticketService.getBySession(session.id);
-      setTickets(data);
-
-      setActiveTicket((prev) => {
-        if (!prev) {
-          const current = data.find((t) => t.status === "VOTING" || t.status === "REVEALED");
-          return current || null;
-        }
-        const serverTicket = data.find((t) => t.id === prev.id);
-        return serverTicket || prev;
-      });
-    } catch {
-      // Manejado por interceptor global
-    }
-  }, [session?.id]);
 
   useEffect(() => {
     loadTickets();
@@ -639,7 +660,7 @@ export default function VotingBoard() {
 
           <div className="text-center my-4">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Estimando ({activeTicket.status}):
+              Estimando ({activeTicket.status}) • Ronda {activeTicket.currentRound || 1}:
             </span>
             <h2 className="text-xl font-bold text-foreground">{activeTicket.title}</h2>
           </div>
