@@ -12,6 +12,8 @@ import { Input } from "../ui/input";
 import CardHand from "../CardHand/CardHand";
 import VoteBoard from "../VoteBoard/VoteBoard";
 import RevealPanel from "../RevealPanel/RevealPanel";
+import ImportGitHubModal from "./ImportGitHubModal";
+import ExportGitHubModal from "./ExportGitHubModal";
 import type { 
   SessionResponse, 
   CardValueResponse, 
@@ -20,11 +22,10 @@ import type {
   VotingRRAverageResponse 
 } from "@/types";
 
-// Extensión defensiva en caso de que el backend envíe ticketId en el payload
 interface ExtendedVotingRRAverageResponse extends VotingRRAverageResponse {
   ticketId?: string;
-  action?: string; // NUEVO: Para saber qué evento es (VOTES_RESET, etc)
-  newRound?: number; // NUEVO: Para poder actualizar la ronda visualmente
+  action?: string;
+  newRound?: number;
 }
 
 export default function VotingBoard() {
@@ -53,7 +54,11 @@ export default function VotingBoard() {
   const [voteStatusMap, setVoteStatusMap] = useState<VoteStatusMap>({});
   const [sessionVotesData, setSessionVotesData] = useState<VotingRRAverageResponse | null>(null);
 
-  // Bloqueo de concurrencia para evitar envíos múltiples
+  // Estados para Modales de GitHub
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [exportModalTicket, setExportModalTicket] = useState<{ id: string; title: string } | null>(null);
+
+  // Bloqueo de concurrencia
   const [isRevealing, setIsRevealing] = useState(false);
 
   // Cliente STOMP
@@ -79,7 +84,7 @@ export default function VotingBoard() {
 
   const isHost = session?.hostUsername === currentUsername;
 
-  // Sincronizar voteStatusMap a partir del polling de votos cuando no hay WebSocket conectado
+  // Sincronizar voteStatusMap con fallback
   useEffect(() => {
     if (wsConnected) return;
 
@@ -90,9 +95,7 @@ export default function VotingBoard() {
     setVoteStatusMap(newMap);
   }, [votes, wsConnected]);
 
-  // Unirse a la sala (idempotente) y cargar la baraja según su serie.
-  // El backend solo acepta suscripciones STOMP de participantes, así que el join REST va primero:
-  // cubre también a quien entra por un enlace directo sin pasar por el lobby.
+  // Unirse a la sala y cargar la baraja
   useEffect(() => {
     if (!code) return;
 
@@ -102,8 +105,6 @@ export default function VotingBoard() {
       .then((sessionData) => {
         setSession(sessionData);
         setIsJoined(true);
-
-        // Usar la serie que el creador definió para la sesión (o FIBONACCI por defecto)
         const seriesToLoad = sessionData.seriesType || "FIBONACCI";
         return cardDeckService.getDeckBySeries(seriesToLoad);
       })
@@ -117,7 +118,7 @@ export default function VotingBoard() {
       });
   }, [code, isGuest]);
 
-  // Errores de acciones por WebSocket: llegan solo a esta conexión
+  // Errores WebSocket
   useEffect(() => {
     if (!wsConnected) return;
 
@@ -135,7 +136,7 @@ export default function VotingBoard() {
     };
   }, [wsConnected, subscribe]);
 
-  // Carga inicial de tickets (definida antes para poder llamarla al montar)
+  // Carga de tickets
   const loadTickets = useCallback(async () => {
     if (!session?.id) return;
     try {
@@ -155,48 +156,39 @@ export default function VotingBoard() {
     }
   }, [session?.id]);
 
-  // Suscripciones STOMP y Join seguro
+  // Suscripciones STOMP
   useEffect(() => {
     if (!wsConnected || !code || !currentUsername || !isJoined) return;
 
-    // 1. Suscripción a Participantes
     const subParticipants = subscribe<Participant[]>(`/topic/session/${code}/participants`, (data) => {
       if (Array.isArray(data)) {
         setParticipants(data);
       }
     });
 
-    // 2. Suscripción a Quién votó (Confirmación autoritativa del servidor)
     const subVoteStatus = subscribe<VoteStatusMap>(`/topic/session/${code}/vote-status`, (data) => {
       if (data && typeof data === "object") {
         setVoteStatusMap(data);
       }
     });
 
-    // 3. Suscripción a Resultados de Votación / Control de Rondas (Filtrada por ticketId)
     const subVotes = subscribe<ExtendedVotingRRAverageResponse>(`/topic/session/${code}/votes`, (data) => {
       if (data && typeof data === "object") {
         if (data.ticketId && activeTicket && data.ticketId !== activeTicket.id) {
           return;
         }
 
-        // NUEVO: Manejar el evento de reset que envía el Backend de forma limpia y eficiente sin llamadas HTTP redundantes
         if (data.action === "VOTES_RESET") {
           setSessionVotesData(null);
           setSelectedCard(null);
           setVoteStatusMap({});
-          
           const updatedRound = data.newRound ?? 1;
 
           setActiveTicket((prev) => (prev ? { ...prev, status: "VOTING", currentRound: updatedRound } : null));
-          
           setTickets((prev) =>
-            prev.map((t) => {
-              return t.id === data.ticketId ? { ...t, status: "VOTING", currentRound: updatedRound } : t;
-            })
+            prev.map((t) => (t.id === data.ticketId ? { ...t, status: "VOTING", currentRound: updatedRound } : t))
           );
-          
-          return; 
+          return;
         }
 
         if (data.revealed) {
@@ -227,7 +219,6 @@ export default function VotingBoard() {
       }
     });
 
-    // 4. Suscripción a Tickets actualizados o reseteados en tiempo real
     const subTicketUpdated = subscribe<TicketResponse>(
       `/topic/session/${code}/ticket-updated`,
       (updatedTicket) => {
@@ -255,8 +246,15 @@ export default function VotingBoard() {
       }
     );
 
-    // 5. Emitir Join seguro. La identidad sale del token del CONNECT (usuario o invitado),
-    // nunca de un nombre enviado en el payload.
+    // Notificación en vivo cuando se importan tickets de GitHub
+    const subTicketsImported = subscribe<{ message?: string; count?: number }>(
+      `/topic/session/${code}/tickets-imported`,
+      () => {
+        loadTickets();
+        toast.info("Se han añadido nuevos tickets a la sala");
+      }
+    );
+
     const joinPayload: Record<string, string> = { inviteCode: code };
     if (activeTicket?.id) {
       joinPayload.ticketId = activeTicket.id;
@@ -268,10 +266,10 @@ export default function VotingBoard() {
       subVoteStatus?.unsubscribe();
       subVotes?.unsubscribe();
       subTicketUpdated?.unsubscribe();
+      subTicketsImported?.unsubscribe();
     };
-  }, [wsConnected, code, currentUsername, isGuest, isJoined, publish, subscribe, setSelectedCard, activeTicket]);
+  }, [wsConnected, code, currentUsername, isGuest, isJoined, publish, subscribe, setSelectedCard, activeTicket, loadTickets]);
 
-  // Limpiar estados de votación cuando cambia el ticket activo
   useEffect(() => {
     setVoteStatusMap({});
     setSessionVotesData(null);
@@ -281,7 +279,6 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // Cambiar estado manual del ticket
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -359,7 +356,6 @@ export default function VotingBoard() {
     }
   };
 
-  // Voto: STOMP o HTTP fallback
   const handleSubmitVote = async () => {
     if (!selectedCard || !code || !activeTicket) return;
 
@@ -377,7 +373,6 @@ export default function VotingBoard() {
     }
   };
 
-  // Revelar
   const handleRevealVotes = async () => {
     if (!activeTicket || isRevealing) return;
     setIsRevealing(true);
@@ -395,7 +390,6 @@ export default function VotingBoard() {
     }
   };
 
-  // Nueva Ronda
   const handleResetVotes = async () => {
     if (!activeTicket || !session || !code) return;
 
@@ -456,13 +450,23 @@ export default function VotingBoard() {
         </div>
         <div className="flex items-center gap-2">
           {isHost && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowCreateForm(!showCreateForm)}
-            >
-              {showCreateForm ? "Cerrar creador" : "+ Crear ticket"}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsImportModalOpen(true)}
+                className="gap-1.5"
+              >
+                🐙 Importar GitHub
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+              >
+                {showCreateForm ? "Cerrar creador" : "+ Crear ticket"}
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" onClick={() => navigate("/home")}>
             Volver al lobby
@@ -637,6 +641,18 @@ export default function VotingBoard() {
                           Finalizar
                         </Button>
                       )}
+
+                      {/* Botón para exportar estimado a GitHub */}
+                      {t.status === "FINISHED" && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-xs font-semibold"
+                          onClick={() => setExportModalTicket({ id: t.id, title: t.title })}
+                        >
+                          Exportar a GitHub ↗
+                        </Button>
+                      )}
                     </div>
                   )}
                 </li>
@@ -674,7 +690,7 @@ export default function VotingBoard() {
             />
           )}
 
-          {/* Tablero de participantes con cartas / checks */}
+          {/* Tablero de participantes */}
           <VoteBoard
             participants={participants}
             votes={displayVotes}
@@ -683,7 +699,7 @@ export default function VotingBoard() {
             currentUsername={currentUsername}
           />
 
-          {/* Selector de baraja usando CardHand con soporte dinámico */}
+          {/* Selector de baraja */}
           <div className="w-full max-w-4xl flex flex-col items-center gap-4">
             <CardHand
               values={deckCards}
@@ -709,6 +725,26 @@ export default function VotingBoard() {
         <section className="text-center my-12 text-muted-foreground">
           <p>Selecciona un ticket del listado arriba o crea uno nuevo para comenzar la votación.</p>
         </section>
+      )}
+
+      {/* Modal de Importación desde GitHub */}
+      {session && (
+        <ImportGitHubModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          sessionId={session.id}
+          onImportSuccess={loadTickets}
+        />
+      )}
+
+      {/* Modal de Exportación a GitHub */}
+      {exportModalTicket && (
+        <ExportGitHubModal
+          isOpen={Boolean(exportModalTicket)}
+          onClose={() => setExportModalTicket(null)}
+          ticketId={exportModalTicket.id}
+          ticketTitle={exportModalTicket.title}
+        />
       )}
     </main>
   );

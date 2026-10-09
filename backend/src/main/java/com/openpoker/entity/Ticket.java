@@ -84,6 +84,18 @@ public class Ticket {
         }
     }
 
+    @Column(name = "external_source", length = 50)
+    private String externalSource; // ej: "GITHUB"
+
+    @Column(name = "external_id", length = 100)
+    private String externalId; // Número o ID del issue (ej: "123")
+
+    @Column(name = "external_url", length = 500)
+    private String externalUrl; // Enlace directo al issue en GitHub
+
+    @Column(name = "external_repo", length = 255)
+    private String externalRepo; // ej: "octocat/Hello-World"
+
 
 
 
