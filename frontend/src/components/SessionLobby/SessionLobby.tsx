@@ -1,16 +1,19 @@
+import { useState } from "react";
 import useAuthStore from "@/store/authStore";
 import { useLogout } from "@/hooks/useLogout";
 import SessionFormCreate from "./SessionFormCreate";
 import SessionFormJoin from "./SessionFormJoin";
+import HistoryModal from "../History/HistoryModal"; // 👈 Importamos el modal
 import { Button } from "../ui/button";
 
 export default function SessionLobby() {
   const username = useAuthStore((state) => state.username);
   const handleLogout = useLogout();
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false); // 👈 Estado del modal
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md space-y-8 bg-card p-6 rounded-xl shadow-lg border border-border">
+      <div className="w-full max-w-md space-y-6 bg-card p-6 rounded-xl shadow-lg border border-border">
         {/* Cabecera */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -20,6 +23,16 @@ export default function SessionLobby() {
             Crea una nueva sala o únete a una existente
           </p>
         </div>
+
+        {/* Botón de acceso rápido al Historial */}
+        <Button
+          variant="secondary"
+          size="sm"
+          className="w-full font-medium flex items-center justify-center gap-2"
+          onClick={() => setIsHistoryOpen(true)}
+        >
+          🕒 Ver mi historial de sesiones y tickets
+        </Button>
 
         {/* Sección: Crear Sesión */}
         <div className="space-y-3">
@@ -58,6 +71,12 @@ export default function SessionLobby() {
           </Button>
         </div>
       </div>
+
+      {/* Modal flotante */}
+      <HistoryModal 
+        isOpen={isHistoryOpen} 
+        onClose={() => setIsHistoryOpen(false)} 
+      />
     </div>
   );
 }
