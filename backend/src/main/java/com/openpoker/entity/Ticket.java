@@ -50,12 +50,14 @@ public class Ticket {
     @Column(nullable = false)
     private TicketStatus status;
 
+    @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
     @Column(name = "position")
     private Integer position;
 
+    @Builder.Default
     @Column(name = "current_round", nullable = false)
     private Integer currentRound = 1;
 
@@ -81,6 +83,12 @@ public class Ticket {
         }
         if (this.status == null) {
             this.status = TicketStatus.WAITING; // <-- Inicia siempre en WAITING
+        }
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now(); // 👈 Agrega esta línea
+        }
+        if (this.currentRound == null) {
+            this.currentRound = 1; // 👈 Agrega esta línea
         }
     }
 

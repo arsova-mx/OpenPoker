@@ -1,5 +1,6 @@
 package com.openpoker.controller;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -60,8 +61,10 @@ public class IntegrationController {
             Ticket ticket = Ticket.builder()
                     .gameSession(session)
                     .tittle("#" + issue.getNumber() + " " + issue.getTitle())
-                    .description(issue.getBody())
+                    .description(summarizeIssueBody(issue.getBody())) // 👈 Resumen limpio y seguro (< 450 caracteres)
                     .status(TicketStatus.WAITING)
+                    .createdAt(Instant.now())
+                    .currentRound(1)
                     .position(++currentPosition)
                     .externalSource("GITHUB")
                     .externalId(String.valueOf(issue.getNumber()))
@@ -126,5 +129,37 @@ public class IntegrationController {
         );
 
         return ResponseEntity.ok(Map.of("message", "Estimación exportada exitosamente"));
+    }
+
+    // Método auxiliar para limpiar y resumir la descripción
+    private String summarizeIssueBody(String body) {
+        if (body == null || body.isBlank()) {
+            return "Sin descripción.";
+        }
+
+        // 1. Quitar comentarios HTML (<!-- ... -->) de plantillas
+        String clean = body.replaceAll("(?s)<!--.*?-->", "");
+
+        // 2. Quitar bloques de código ``` ... ```
+        clean = clean.replaceAll("(?s)```.*?```", "[código omitido]");
+
+        // 3. Quitar imágenes Markdown ![texto](url)
+        clean = clean.replaceAll("!\\[.*?\\]\\(.*?\\)", "");
+
+        // 4. Normalizar saltos de línea repetidos y espacios
+        clean = clean.replaceAll("\\r\\n|\\r", "\n").trim();
+
+        // 5. Máximo 450 caracteres (para asegurar que entre en VARCHAR(500))
+        final int MAX_CHARS = 450;
+        if (clean.length() <= MAX_CHARS) {
+            return clean;
+        }
+
+        int cutoff = clean.lastIndexOf(' ', MAX_CHARS);
+        if (cutoff <= 0) {
+            cutoff = MAX_CHARS;
+        }
+
+        return clean.substring(0, cutoff).trim() + "...";
     }
 }
