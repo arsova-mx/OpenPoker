@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.openpoker.controller.TicketController.CreateTicketDTO;
 import com.openpoker.dto.TicketResponseDTO;
+import com.openpoker.entity.CardValue;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.Ticket;
@@ -18,6 +19,7 @@ import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.globalexception.UsernameIsNotParticipantSessionException;
+import com.openpoker.repository.CardValueRepository;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
@@ -31,22 +33,22 @@ public class TicketService {
     private final TicketRepository ticketRepository;
     private final GameSessionRepository sessionRepository;
     private final ParticipantRepository participantRepository;
-    private final UserRepository userRepository; // 👈 Inyección requerida para autenticar por username
+    private final UserRepository userRepository;
+    private final CardValueRepository cardValueRepository; // 👈 Inyección requerida para persistir la carta
 
     @Transactional
     public TicketResponseDTO createTicket(String username, CreateTicketDTO dto) {
         GameSession session = sessionRepository.findById(dto.getGameSessionId())
                 .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
 
-        // 🔒 Autorización: Validar que quien crea sea HOST de la sesión
         validateHost(session, username);
 
         Ticket ticket = Ticket.builder()
                 .id(UUID.randomUUID())
-                .tittle(dto.getTitle()) // Mantenemos tu typo original "tittle" para no romper tu entidad
+                .tittle(dto.getTitle())
                 .description(dto.getDescription())
                 .gameSession(session)
-                .currentRound(1) // NUEVO: Inicializar el ticket en la ronda 1
+                .currentRound(1)
                 .createdAt(Instant.now())
                 .build();
 
@@ -62,15 +64,31 @@ public class TicketService {
         );
     }
 
+    // Sobrecarga para mantener compatibilidad si no se envía carta
     @Transactional
     public TicketResponseDTO updateStatus(String username, UUID ticketId, TicketStatus newStatus) {
+        return updateStatus(username, ticketId, newStatus, null);
+    }
+
+    // Método principal que persiste estimatedCard cuando el estado pasa a FINISHED
+    @Transactional
+    public TicketResponseDTO updateStatus(String username, UUID ticketId, TicketStatus newStatus, UUID estimatedCardId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new IllegalArgumentException("Ticket no encontrado"));
 
-        // 🔒 Autorización: Validar que quien cambia el estado sea HOST de la sesión del ticket
         validateHost(ticket.getGameSession(), username);
 
         ticket.setStatus(newStatus);
+
+        if (newStatus == TicketStatus.FINISHED) {
+            ticket.setFinishedAt(Instant.now());
+            if (estimatedCardId != null) {
+                CardValue card = cardValueRepository.findById(estimatedCardId)
+                        .orElseThrow(() -> new IllegalArgumentException("Carta no encontrada"));
+                ticket.setEstimatedCard(card); // 👈 Persistimos la carta acordada
+            }
+        }
+
         Ticket updatedTicket = ticketRepository.save(ticket);
 
         return new TicketResponseDTO(
@@ -100,6 +118,7 @@ public class TicketService {
         }
 
         ticket.setStatus(TicketStatus.FINISHED);
+        ticket.setFinishedAt(Instant.now());
         Ticket savedTicket = ticketRepository.save(ticket);
 
         return new TicketResponseDTO(

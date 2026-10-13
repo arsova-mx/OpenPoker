@@ -90,7 +90,8 @@ public class TicketController {
     public ResponseEntity<TicketResponseDTO> updateTicketStatus(
             @AuthenticationPrincipal String username,
             @PathVariable UUID ticketId, 
-            @RequestParam TicketStatus newStatus) {
+            @RequestParam TicketStatus newStatus,
+            @RequestParam(required = false) UUID estimatedCardId) {
 
         // 🔒 Delegamos la actualización y validación de HOST al servicio
         TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus);

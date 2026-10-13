@@ -10,6 +10,11 @@ export interface GitHubIssue {
   state: string;
 }
 
+export interface QueryGitHubIssuesRequest {
+  repo: string;
+  personalAccessToken?: string;
+}
+
 export interface ImportGitHubRequest {
   sessionId: string;
   repo: string;
@@ -17,12 +22,18 @@ export interface ImportGitHubRequest {
   issues: GitHubIssue[];
 }
 
+export interface ExportEstimationResponse {
+  message: string;
+}
+
 export const githubService = {
-  // GET /api/integrations/github/issues?repo=owner/repo&token=...
+  // POST /api/integrations/github/issues/query
   fetchIssues: async (repo: string, token?: string): Promise<GitHubIssue[]> => {
-    const response = await instance.get<GitHubIssue[]>("/integrations/github/issues", {
-      params: { repo, token: token || undefined },
-    });
+    const payload: QueryGitHubIssuesRequest = {
+      repo,
+      personalAccessToken: token || undefined,
+    };
+    const response = await instance.post<GitHubIssue[]>("/integrations/github/issues/query", payload);
     return response.data;
   },
 
@@ -33,11 +44,18 @@ export const githubService = {
   },
 
   // POST /api/integrations/github/tickets/{ticketId}/export
-  exportEstimation: async (ticketId: string, token: string, customComment?: string) => {
-    const response = await instance.post(`/integrations/github/tickets/${ticketId}/export`, {
-      personalAccessToken: token,
-      customComment,
-    });
+  exportEstimation: async (
+    ticketId: string, 
+    token: string, 
+    customComment?: string
+  ): Promise<ExportEstimationResponse> => {
+    const response = await instance.post<ExportEstimationResponse>(
+      `/integrations/github/tickets/${ticketId}/export`, 
+      {
+        personalAccessToken: token,
+        customComment: customComment || undefined,
+      }
+    );
     return response.data;
   },
 };

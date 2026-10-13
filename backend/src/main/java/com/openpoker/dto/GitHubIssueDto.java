@@ -1,5 +1,6 @@
 package com.openpoker.dto;
 
+import java.util.Map;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
@@ -16,4 +17,7 @@ public class GitHubIssueDto {
     private String htmlUrl;
     
     private String state;
+
+    @JsonProperty("pull_request")
+    private Map<String, Object> pullRequest;
 }
