@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { githubService, GitHubIssue } from "@/api/services/githubService";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface ImportGitHubModalProps {
   isOpen: boolean;
@@ -23,7 +30,36 @@ export default function ImportGitHubModal({
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
 
-  if (!isOpen) return null;
+  // Limpiar credenciales y estado cada vez que el modal se cierra o se abre de nuevo
+  const resetForm = () => {
+    setRepo("");
+    setToken("");
+    setIssues([]);
+    setSelectedIssues({});
+    setLoading(false);
+    setImporting(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  // Limpiar estado sensible si isOpen cambia a false
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm();
+    }
+  }, [isOpen]);
+
+  const handleRepoChange = (newRepo: string) => {
+    setRepo(newRepo);
+    // Si cambia el repo, limpiar la lista previa para evitar importar issues cruzados
+    if (issues.length > 0) {
+      setIssues([]);
+      setSelectedIssues({});
+    }
+  };
 
   const handleFetchIssues = async () => {
     if (!repo.trim() || !repo.includes("/")) {
@@ -35,14 +71,14 @@ export default function ImportGitHubModal({
 
     setLoading(true);
     try {
-      const data = await githubService.fetchIssues(repo.trim(), token.trim());
+      const data = await githubService.fetchIssues(repo.trim(), token.trim() || undefined);
       setIssues(data);
       setSelectedIssues({});
       if (data.length === 0) {
         toast.info("No se encontraron issues abiertos");
       }
     } catch {
-      // Error manejado en APIClient interceptor
+      // Error manejado en interceptor
     } finally {
       setLoading(false);
     }
@@ -75,16 +111,16 @@ export default function ImportGitHubModal({
 
     setImporting(true);
     try {
+      // Ya NO se envía personalAccessToken porque el backend de importación no lo usa
       await githubService.importIssues({
         sessionId,
         repo: repo.trim(),
-        personalAccessToken: token.trim() || undefined,
         issues: chosen,
       });
 
       toast.success(`${chosen.length} tickets importados correctamente`);
       if (onImportSuccess) onImportSuccess();
-      onClose();
+      handleClose();
     } catch {
       // Manejado por interceptor
     } finally {
@@ -95,41 +131,46 @@ export default function ImportGitHubModal({
   const selectedCount = Object.values(selectedIssues).filter(Boolean).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-        {/* Cabecera */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-bold text-foreground">Importar Issues de GitHub</h2>
-            <p className="text-xs text-muted-foreground">
-              Trae issues de un repositorio para estimarlos como tickets
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            ✕
-          </Button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        {/* Cabecera con DialogHeader */}
+        <DialogHeader className="p-4 border-b border-border">
+          <DialogTitle className="text-lg font-bold text-foreground">
+            Importar Issues de GitHub
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Trae issues de un repositorio para estimarlos como tickets
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Inputs de configuración */}
         <div className="p-4 border-b border-border bg-muted/20 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+              <label 
+                htmlFor="github-repo-input" 
+                className="text-xs font-semibold text-muted-foreground block mb-1"
+              >
                 Repositorio (owner/repo) *
               </label>
               <input
+                id="github-repo-input"
                 type="text"
                 placeholder="ej: facebook/react"
                 value={repo}
-                onChange={(e) => setRepo(e.target.value)}
+                onChange={(e) => handleRepoChange(e.target.value)}
                 className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">
+              <label 
+                htmlFor="github-token-input" 
+                className="text-xs font-semibold text-muted-foreground block mb-1"
+              >
                 Personal Access Token (PAT)
               </label>
               <input
+                id="github-token-input"
                 type="password"
                 placeholder="Opcional para repos públicos"
                 value={token}
@@ -176,9 +217,11 @@ export default function ImportGitHubModal({
             issues.map((issue) => (
               <label
                 key={issue.id}
+                htmlFor={`issue-checkbox-${issue.number}`}
                 className="flex items-start gap-3 p-3 bg-muted/30 hover:bg-muted/60 transition-colors border border-border rounded-lg cursor-pointer"
               >
                 <input
+                  id={`issue-checkbox-${issue.number}`}
                   type="checkbox"
                   checked={!!selectedIssues[issue.number]}
                   onChange={() => toggleSelectIssue(issue.number)}
@@ -201,7 +244,7 @@ export default function ImportGitHubModal({
 
         {/* Footer */}
         <div className="p-3 border-t border-border flex items-center justify-between bg-muted/10">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={handleClose}>
             Cancelar
           </Button>
           <Button
@@ -212,7 +255,7 @@ export default function ImportGitHubModal({
             {importing ? "Importando..." : `Importar (${selectedCount})`}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

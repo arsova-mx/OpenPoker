@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { githubService } from "@/api/services/githubService";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface ExportGitHubModalProps {
   isOpen: boolean;
@@ -20,7 +27,22 @@ export default function ExportGitHubModal({
   const [customComment, setCustomComment] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!isOpen) return null;
+  const resetForm = () => {
+    setToken("");
+    setCustomComment("");
+    setLoading(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onClose();
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm();
+    }
+  }, [isOpen]);
 
   const handleExport = async () => {
     if (!token.trim()) {
@@ -32,9 +54,13 @@ export default function ExportGitHubModal({
 
     setLoading(true);
     try {
-      await githubService.exportEstimation(ticketId, token.trim(), customComment.trim() || undefined);
+      await githubService.exportEstimation(
+        ticketId, 
+        token.trim(), 
+        customComment.trim() || undefined
+      );
       toast.success("Comentario publicado exitosamente en GitHub");
-      onClose();
+      handleClose();
     } catch {
       // Manejado por interceptor
     } finally {
@@ -43,21 +69,27 @@ export default function ExportGitHubModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-4 space-y-4">
-        <div>
-          <h2 className="text-lg font-bold text-foreground">Exportar a GitHub</h2>
-          <p className="text-xs text-muted-foreground truncate">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent className="max-w-md p-4 space-y-4">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold text-foreground">
+            Exportar a GitHub
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground truncate">
             Ticket: {ticketTitle}
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-semibold text-muted-foreground block mb-1">
+            <label 
+              htmlFor="github-export-token" 
+              className="text-xs font-semibold text-muted-foreground block mb-1"
+            >
               Personal Access Token (con permisos de issues) *
             </label>
             <input
+              id="github-export-token"
               type="password"
               placeholder="ghp_..."
               value={token}
@@ -67,10 +99,14 @@ export default function ExportGitHubModal({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-muted-foreground block mb-1">
+            <label 
+              htmlFor="github-export-comment" 
+              className="text-xs font-semibold text-muted-foreground block mb-1"
+            >
               Comentario personalizado (opcional)
             </label>
             <textarea
+              id="github-export-comment"
               rows={3}
               placeholder="Deja vacío para usar el formato por defecto de OpenPoker"
               value={customComment}
@@ -81,14 +117,14 @@ export default function ExportGitHubModal({
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-          <Button variant="outline" size="sm" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={handleClose}>
             Cancelar
           </Button>
           <Button size="sm" onClick={handleExport} disabled={loading}>
             {loading ? "Publicando..." : "Publicar Comentario"}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

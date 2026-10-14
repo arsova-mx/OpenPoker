@@ -82,7 +82,13 @@ export default function VotingBoard() {
     error: votingError,
   } = useVoting(code || "", activeTicket ? activeTicket.id : null);
 
-  const isHost = session?.hostUsername === currentUsername;
+  // Manejo de Host tolerante a mayúsculas/minúsculas y objetos anidados
+  const rawHost = session?.hostUsername || (session as unknown as { host?: { username?: string } })?.host?.username;
+  const isHost = Boolean(
+    rawHost &&
+    currentUsername &&
+    rawHost.trim().toLowerCase() === currentUsername.trim().toLowerCase()
+  );
 
   // Sincronizar voteStatusMap con fallback
   useEffect(() => {
@@ -279,6 +285,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
+  // ✅ CORREGIDO: Evita subir a Ronda 2 si el ticket apenas se está activando desde WAITING
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -286,7 +293,10 @@ export default function VotingBoard() {
   ) => {
     e.stopPropagation();
     try {
-      if (newStatus === "VOTING") {
+      const targetTicket = tickets.find((t) => t.id === ticketId);
+
+      // Solo reiniciar votos si el ticket ya estaba en votación o revelado
+      if (newStatus === "VOTING" && targetTicket && targetTicket.status !== "WAITING") {
         await resetVotes(ticketId);
         setSelectedCard(null);
         setVoteStatusMap({});
@@ -642,12 +652,12 @@ export default function VotingBoard() {
                         </Button>
                       )}
 
-                      {/* Botón para exportar estimado a GitHub */}
-                      {t.status === "FINISHED" && (
+                      {/* ✅ Botón de exportación en la lista para tickets finalizados de GitHub */}
+                      {t.status === "FINISHED" && (String(t.externalSource).toUpperCase() === "GITHUB" || t.title.startsWith("#")) && (
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="h-8 text-xs font-semibold"
+                          className="h-8 text-xs font-semibold bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20"
                           onClick={() => setExportModalTicket({ id: t.id, title: t.title })}
                         >
                           Exportar a GitHub ↗
@@ -688,6 +698,20 @@ export default function VotingBoard() {
               suggestedCardValue={sessionVotesData?.suggestedCardValue}
               totalVotes={displayVotes.length}
             />
+          )}
+
+          {/* ✅ BOTÓN EN LA MESA CENTRAL: Si el ticket activo está FINISHED y viene de GitHub */}
+          {isHost && activeTicket.status === "FINISHED" && (String(activeTicket.externalSource).toUpperCase() === "GITHUB" || activeTicket.title.startsWith("#")) && (
+            <div className="my-4 flex justify-center">
+              <Button
+                size="default"
+                variant="secondary"
+                className="font-bold gap-2 shadow-md border border-border bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => setExportModalTicket({ id: activeTicket.id, title: activeTicket.title })}
+              >
+                🐙 Exportar estimación a GitHub Issue ↗
+              </Button>
+            </div>
           )}
 
           {/* Tablero de participantes */}

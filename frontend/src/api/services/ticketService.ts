@@ -9,6 +9,7 @@ export interface TicketResponse {
   gameSessionId: string;
   status: TicketStatus;
   currentRound: number; // 👈 Agrégale esta línea aquí
+  externalSource?: string | null;
 }
 
 export interface CreateTicketRequest {

@@ -60,7 +60,8 @@ public class TicketService {
             savedTicket.getDescription(),
             savedTicket.getGameSession().getId(),
             savedTicket.getStatus(),
-            savedTicket.getCurrentRound()
+            savedTicket.getCurrentRound(),
+            savedTicket.getExternalSource()
         );
     }
 
@@ -97,7 +98,8 @@ public class TicketService {
                 updatedTicket.getDescription(),
                 updatedTicket.getGameSession().getId(),
                 updatedTicket.getStatus(),
-                updatedTicket.getCurrentRound()
+                updatedTicket.getCurrentRound(),
+                updatedTicket.getExternalSource()
         );
     }
 
@@ -127,7 +129,8 @@ public class TicketService {
                 savedTicket.getDescription(),
                 savedTicket.getGameSession().getId(),
                 savedTicket.getStatus(),
-                savedTicket.getCurrentRound()
+                savedTicket.getCurrentRound(),
+                savedTicket.getExternalSource()
         );
     }
 

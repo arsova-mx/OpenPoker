@@ -5,8 +5,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import com.openpoker.dto.SessionTicketCountsProjection;
 import com.openpoker.entity.Ticket;
 import com.openpoker.entity.TicketStatus;
 
@@ -25,4 +28,15 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
 
     // 3. Conteo de tickets filtrados por estado (ej. FINISHED)
     long countByGameSessionIdAndStatus(UUID gameSessionId, TicketStatus status);
+
+    @Query("""
+        SELECT 
+            t.gameSession.id AS sessionId,
+            COUNT(t.id) AS totalTickets,
+            COUNT(CASE WHEN t.estimatedCard IS NOT NULL THEN 1 END) AS estimatedTickets
+        FROM Ticket t
+        WHERE t.gameSession.id IN :sessionIds
+        GROUP BY t.gameSession.id
+    """)
+    List<SessionTicketCountsProjection> countTicketStatsBySessionIds(@Param("sessionIds") List<UUID> sessionIds);
 }

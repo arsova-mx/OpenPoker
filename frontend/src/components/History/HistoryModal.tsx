@@ -7,6 +7,13 @@ import {
   HistoryFilter 
 } from "@/api/services/historyService";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface HistoryModalProps {
   isOpen: boolean;
@@ -19,24 +26,35 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
   const [sessions, setSessions] = useState<SessionHistorySummary[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Paginación
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   // Sesión seleccionada para ver su desglose de tickets
   const [selectedSession, setSelectedSession] = useState<SessionHistorySummary | null>(null);
   const [tickets, setTickets] = useState<TicketHistoryItem[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
 
+  // Reiniciar a la primera página cuando cambie el filtro
+  const handleFilterChange = (newFilter: HistoryFilter) => {
+    setFilter(newFilter);
+    setPage(0);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      loadSessions();
+      loadSessions(page, filter);
     }
-  }, [isOpen, filter]);
+  }, [isOpen, page, filter]);
 
-  const loadSessions = async () => {
+  const loadSessions = async (pageNumber: number, activeFilter: HistoryFilter) => {
     setLoading(true);
     try {
-      const data = await historyService.getMySessions(filter);
+      const data = await historyService.getMySessions(activeFilter, pageNumber);
       setSessions(data.content || []);
+      setTotalPages(data.totalPages || 1);
     } catch {
-      // Los errores se manejan automáticamente vía toast en APIClient
+      // Manejado vía toast en interceptor
     } finally {
       setLoading(false);
     }
@@ -55,30 +73,20 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-        {/* Cabecera del Modal */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-bold text-foreground">
-              {selectedSession ? `Detalles: ${selectedSession.name}` : "Historial de Sesiones"}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              {selectedSession
-                ? `Código: ${selectedSession.sessionCode} • ${selectedSession.isHost ? "Fuiste Host" : "Participaste"}`
-                : "Revisa las sesiones que creaste o en las que votaste"}
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => {
-            if (selectedSession) setSelectedSession(null);
-            else onClose();
-          }}>
-            ✕
-          </Button>
-        </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
+        {/* Cabecera accesible con DialogHeader */}
+        <DialogHeader className="p-4 border-b border-border">
+          <DialogTitle className="text-lg font-bold text-foreground">
+            {selectedSession ? `Detalles: ${selectedSession.name}` : "Historial de Sesiones"}
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            {selectedSession
+              ? `Código: ${selectedSession.sessionCode} • ${selectedSession.isHost ? "Fuiste Host" : "Participaste"}`
+              : "Revisa las sesiones que creaste o en las que votaste"}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Vista 1: Detalle de Tickets de una sesión seleccionada */}
         {selectedSession ? (
@@ -87,15 +95,19 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
               <Button variant="outline" size="sm" onClick={() => setSelectedSession(null)}>
                 ← Volver a sesiones
               </Button>
-              <Button 
-                size="sm" 
-                onClick={() => {
-                  onClose();
-                  navigate(`/session/${selectedSession.sessionCode}`);
-                }}
-              >
-                Entrar a la sala
-              </Button>
+
+              {/* Solo mostrar el botón si la sala está ACTIVA */}
+              {selectedSession.status === "ACTIVE" && (
+                <Button 
+                  size="sm" 
+                  onClick={() => {
+                    onClose();
+                    navigate(`/session/${selectedSession.sessionCode}`);
+                  }}
+                >
+                  Entrar a la sala
+                </Button>
+              )}
             </div>
 
             {loadingTickets ? (
@@ -132,34 +144,34 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
             )}
           </div>
         ) : (
-          /* Vista 2: Lista general de sesiones con pestañas */
+          /* Vista 2: Lista general de sesiones con filtros y paginación */
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Filtros */}
             <div className="flex gap-2 p-3 border-b border-border bg-muted/20">
               <Button
                 variant={filter === "ALL" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFilter("ALL")}
+                onClick={() => handleFilterChange("ALL")}
               >
                 Todas
               </Button>
               <Button
                 variant={filter === "HOST" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFilter("HOST")}
+                onClick={() => handleFilterChange("HOST")}
               >
                 Mis Salas (Host)
               </Button>
               <Button
                 variant={filter === "PARTICIPANT" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setFilter("PARTICIPANT")}
+                onClick={() => handleFilterChange("PARTICIPANT")}
               >
                 Participadas
               </Button>
             </div>
 
-            {/* Listado */}
+            {/* Listado de sesiones */}
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {loading ? (
                 <p className="text-center py-8 text-sm text-muted-foreground">Cargando historial...</p>
@@ -170,10 +182,11 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
                 </div>
               ) : (
                 sessions.map((session) => (
-                  <div
+                  <button
                     key={session.sessionId}
+                    type="button"
                     onClick={() => handleSelectSession(session)}
-                    className="p-3.5 bg-card hover:bg-muted/50 transition-colors border border-border rounded-lg cursor-pointer flex items-center justify-between gap-4"
+                    className="w-full text-left p-3.5 bg-card hover:bg-muted/50 focus:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary transition-colors border border-border rounded-lg flex items-center justify-between gap-4"
                   >
                     <div>
                       <div className="flex items-center gap-2">
@@ -187,6 +200,9 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
                         >
                           {session.isHost ? "Host" : "Participante"}
                         </span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono uppercase">
+                          {session.status}
+                        </span>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
                         Código: <strong className="text-foreground tracking-wider">{session.sessionCode}</strong> •{" "}
@@ -198,17 +214,42 @@ export default function HistoryModal({ isOpen, onClose }: HistoryModalProps) {
                       <span className="text-xs font-medium text-muted-foreground block">
                         {session.estimatedTickets} / {session.totalTickets} tickets
                       </span>
-                      <span className="text-xs text-primary font-semibold hover:underline">
+                      <span className="text-xs text-primary font-semibold">
                         Ver tickets →
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
+
+            {/* Controles de Paginación */}
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-border flex items-center justify-between bg-muted/10">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                  disabled={page === 0 || loading}
+                >
+                  ← Anterior
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Página {page + 1} de {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
+                  disabled={page >= totalPages - 1 || loading}
+                >
+                  Siguiente →
+                </Button>
+              </div>
+            )}
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

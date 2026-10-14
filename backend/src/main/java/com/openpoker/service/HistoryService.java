@@ -1,7 +1,10 @@
 package com.openpoker.service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
@@ -10,10 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.openpoker.dto.SessionHistorySummaryDto;
+import com.openpoker.dto.SessionTicketCountsProjection;
 import com.openpoker.dto.TicketHistoryDto;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Ticket;
-import com.openpoker.entity.TicketStatus;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.TicketRepository;
 
@@ -38,9 +41,30 @@ public class HistoryService {
             sessionsPage = gameSessionRepository.findUserSessionHistory(userId, pageable);
         }
 
+        // Si la página no tiene resultados, retornamos la página vacía directamente
+        if (sessionsPage.isEmpty()) {
+            return sessionsPage.map(s -> null);
+        }
+
+        // 1. Extraemos los IDs de las sesiones de la página actual
+        List<UUID> sessionIds = sessionsPage.getContent().stream()
+                .map(GameSession::getId)
+                .toList();
+
+        // 2. Ejecutamos una única consulta en batch para traer los conteos agrupados
+        Map<UUID, SessionTicketCountsProjection> countsMap = ticketRepository
+                .countTicketStatsBySessionIds(sessionIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        SessionTicketCountsProjection::getSessionId,
+                        Function.identity()
+                ));
+
+        // 3. Mapeamos cada sesión asociando los conteos en memoria (0 consultas extras a BD)
         return sessionsPage.map(session -> {
-            long totalTickets = ticketRepository.countByGameSessionId(session.getId());
-            long estimatedTickets = ticketRepository.countByGameSessionIdAndStatus(session.getId(), TicketStatus.FINISHED);
+            SessionTicketCountsProjection stats = countsMap.get(session.getId());
+            long total = stats != null ? stats.getTotalTickets() : 0L;
+            long estimated = stats != null ? stats.getEstimatedTickets() : 0L;
 
             return SessionHistorySummaryDto.builder()
                     .sessionId(session.getId())
@@ -50,8 +74,8 @@ public class HistoryService {
                     .createdAt(session.getCreatedAt())
                     .closedAt(session.getClosedAt())
                     .isHost(session.getHost().getId().equals(userId))
-                    .totalTickets(totalTickets)
-                    .estimatedTickets(estimatedTickets)
+                    .totalTickets(total)
+                    .estimatedTickets(estimated)
                     .build();
         });
     }

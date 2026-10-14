@@ -58,7 +58,8 @@ public class IntegrationController {
                         t.getDescription(),
                         t.getGameSession().getId(),
                         t.getStatus(),
-                        t.getCurrentRound()
+                        t.getCurrentRound(),
+                        t.getExternalSource()
                 )).toList();
 
         return ResponseEntity.ok(response);

@@ -9,7 +9,7 @@ export interface SessionHistorySummary {
   name: string;
   status: SessionStatus;
   createdAt: string;
-  closedAt?: string;
+  closedAt?: string | null;
   isHost: boolean;
   totalTickets: number;
   estimatedTickets: number;
@@ -18,14 +18,15 @@ export interface SessionHistorySummary {
 export interface TicketHistoryItem {
   id: string;
   title: string;
-  description?: string;
+  description?: string | null;
   status: string;
   currentRound: number;
-  finishedAt?: string;
-  estimatedValue?: string;
+  finishedAt?: string | null;
+  estimatedValue?: string | null;
 }
 
-interface PageResponse<T> {
+// 👈 Exportada para poder tipar estados o props de paginación en tus componentes
+export interface PageResponse<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
@@ -34,8 +35,12 @@ interface PageResponse<T> {
 }
 
 export const historyService = {
-  // GET /api/history/sessions?filter=...&page=...
-  getMySessions: async (filter: HistoryFilter = "ALL", page = 0, size = 10): Promise<PageResponse<SessionHistorySummary>> => {
+  // GET /api/history/sessions?filter=...&page=...&size=...
+  getMySessions: async (
+    filter: HistoryFilter = "ALL", 
+    page: number = 0, 
+    size: number = 10
+  ): Promise<PageResponse<SessionHistorySummary>> => {
     const response = await instance.get<PageResponse<SessionHistorySummary>>("/history/sessions", {
       params: { filter, page, size },
     });

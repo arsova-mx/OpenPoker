@@ -246,7 +246,8 @@ public class WebSocketController {
                     ticket.getDescription(),
                     ticket.getGameSession().getId(),
                     ticket.getStatus(),
-                    ticket.getCurrentRound()
+                    ticket.getCurrentRound(),
+                    ticket.getExternalSource()
                 );
                 messagingTemplate.convertAndSend("/topic/session/" + finalInviteCode + "/ticket-updated", ticketDto);
             });
