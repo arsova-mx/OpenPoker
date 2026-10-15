@@ -1,7 +1,11 @@
 package com.openpoker.service;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -15,6 +19,7 @@ import com.openpoker.entity.Participant;
 import com.openpoker.entity.Ticket;
 import com.openpoker.entity.TicketStatus;
 import com.openpoker.entity.User;
+import com.openpoker.entity.Vote;
 import com.openpoker.globalexception.InsufficientRoleException;
 import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
@@ -24,6 +29,7 @@ import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.repository.VoteRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,7 +40,8 @@ public class TicketService {
     private final GameSessionRepository sessionRepository;
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
-    private final CardValueRepository cardValueRepository; // 👈 Inyección requerida para persistir la carta
+    private final CardValueRepository cardValueRepository;
+    private final VoteRepository voteRepository;
 
     @Transactional
     public TicketResponseDTO createTicket(String username, CreateTicketDTO dto) {
@@ -83,10 +90,21 @@ public class TicketService {
 
         if (newStatus == TicketStatus.FINISHED) {
             ticket.setFinishedAt(Instant.now());
+
+            CardValue card = null;
             if (estimatedCardId != null) {
-                CardValue card = cardValueRepository.findById(estimatedCardId)
+                card = cardValueRepository.findById(estimatedCardId)
                         .orElseThrow(() -> new IllegalArgumentException("Carta no encontrada"));
-                ticket.setEstimatedCard(card); // 👈 Persistimos la carta acordada
+
+                // 🔒 Valida que la carta pertenezca a la baraja de la sesión
+                validateCardBelongsToSession(ticket.getGameSession(), card);
+            } else {
+                // Fallback: resolver desde los votos de la ronda
+                card = resolveEstimatedCardFromVotes(ticket);
+            }
+
+            if (card != null) {
+                ticket.setEstimatedCard(card);
             }
         }
 
@@ -121,6 +139,14 @@ public class TicketService {
 
         ticket.setStatus(TicketStatus.FINISHED);
         ticket.setFinishedAt(Instant.now());
+
+        if (ticket.getEstimatedCard() == null) {
+            CardValue card = resolveEstimatedCardFromVotes(ticket);
+            if (card != null) {
+                ticket.setEstimatedCard(card);
+            }
+        }
+
         Ticket savedTicket = ticketRepository.save(ticket);
 
         return new TicketResponseDTO(
@@ -133,6 +159,36 @@ public class TicketService {
                 savedTicket.getExternalSource()
         );
     }
+
+    /**
+     * Calcula la carta acordada a partir de los votos emitidos en la ronda actual del ticket.
+     * Selecciona la carta con mayor cantidad de votos (moda).
+     */
+    private CardValue resolveEstimatedCardFromVotes(Ticket ticket) {
+        int round = ticket.getCurrentRound() != null ? ticket.getCurrentRound() : 1;
+        List<Vote> votes = voteRepository.findAllByTicketIdAndRound(ticket.getId(), round);
+
+        if (votes == null || votes.isEmpty()) {
+            return null;
+        }
+
+        return votes.stream()
+                .map(Vote::getCardValue)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(card -> card, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    private void validateCardBelongsToSession(GameSession session, CardValue card) {
+        if (session.getDeck() != null && card.getDeck() != null) {
+            if (!session.getDeck().getId().equals(card.getDeck().getId())) {
+                throw new IllegalArgumentException("La carta seleccionada no pertenece a la baraja de esta sesión");
+            }
+    }
+}
 
     private void validateHost(GameSession session, String username) {
         User user = userRepository.findByUsername(username)

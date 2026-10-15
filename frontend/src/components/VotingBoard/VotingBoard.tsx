@@ -308,7 +308,26 @@ export default function VotingBoard() {
       // Obtener el ID de la carta estimada cuando se finaliza la votación
       let cardIdToSend: string | undefined = undefined;
       if (newStatus === "FINISHED" && activeTicket?.id === ticketId) {
-        const suggestedVal = sessionVotesData?.suggestedCardValue;
+        // 1. Intentar desde datos WebSocket
+        let suggestedVal = sessionVotesData?.suggestedCardValue;
+
+        // 2. Fallback REST: si fue revelado vía REST y votes contiene votos
+        if ((suggestedVal === undefined || suggestedVal === null) && votes.length > 0) {
+          const numericVotes = votes
+            .map((v) => Number(v.cardValue))
+            .filter((val) => !isNaN(val));
+
+          if (numericVotes.length > 0 && deckCards.length > 0) {
+            const avg = numericVotes.reduce((acc, curr) => acc + curr, 0) / numericVotes.length;
+            const closest = deckCards.reduce((prev, curr) => {
+              const prevDiff = Math.abs(Number(prev.value) - avg);
+              const currDiff = Math.abs(Number(curr.value) - avg);
+              return currDiff < prevDiff ? curr : prev;
+            }, deckCards[0]);
+            suggestedVal = closest?.value;
+          }
+        }
+
         if (suggestedVal !== undefined && suggestedVal !== null) {
           const matchedCard = deckCards.find(
             (c) => String(c.value) === String(suggestedVal)
@@ -317,6 +336,7 @@ export default function VotingBoard() {
         }
       }
 
+      // Actualizar estatus (si cardIdToSend es undefined, el backend lo resuelve desde los votos de la base de datos)
       const updated = await ticketService.updateStatus(ticketId, newStatus, cardIdToSend);
 
       if (activeTicket?.id === ticketId) {
@@ -596,7 +616,7 @@ export default function VotingBoard() {
           <ul className="divide-y divide-border">
             {tickets.map((t, index) => {
               const isCurrent = activeTicket?.id === t.id;
-              // ✅ Solo se considera ticket de GitHub si externalSource es estrictamente "GITHUB"
+              // Validación estricta sin prefijos
               const isGithubTicket = t.externalSource?.trim().toUpperCase() === "GITHUB";
 
               return (
@@ -666,7 +686,7 @@ export default function VotingBoard() {
                         </Button>
                       )}
 
-                      {/* Botón de exportación en la fila solo para tickets de GitHub autenticados */}
+                      {/* Botón de exportación en la fila solo para tickets de GitHub */}
                       {t.status === "FINISHED" && isGithubTicket && (
                         <Button
                           size="sm"
@@ -714,7 +734,7 @@ export default function VotingBoard() {
             />
           )}
 
-          {/* ✅ Botón directo en la mesa principal validado únicamente con externalSource */}
+          {/* Botón directo en la mesa principal validado únicamente con externalSource */}
           {isHost && activeTicket.status === "FINISHED" && activeTicket.externalSource?.trim().toUpperCase() === "GITHUB" && (
             <div className="my-4 flex justify-center">
               <Button
