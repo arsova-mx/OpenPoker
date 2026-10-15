@@ -3,7 +3,6 @@ package com.openpoker.service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -65,14 +64,18 @@ public class GitHubImportExportService {
         return savedTickets;
     }
 
-    @Transactional(readOnly = true)
+    /**
+     * Sin @Transactional: La lectura de datos toma y libera la conexión inmediatamente.
+     * La llamada de red síncrona a GitHub se ejecuta completamente fuera del contexto transaccional.
+     */
     public void exportEstimation(String username, UUID ticketId, ExportEstimationRequest request) {
+        // 1. Obtener los datos necesarios (la conexión se abre y se cierra aquí)
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Ticket no encontrado"));
 
         sessionAccessService.requireHost(ticket.getGameSession().getId(), username);
 
-        // Validación: El ticket debe estar finalizado
+        // 2. Validaciones de negocio
         if (ticket.getStatus() != TicketStatus.FINISHED) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo se pueden exportar tickets finalizados");
         }
@@ -81,22 +84,27 @@ public class GitHubImportExportService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El ticket no proviene de GitHub");
         }
 
-        // Obtener valor acordado de forma segura
+        // 3. Preparar variables en memoria
         String estimatedValue = "Consensuado (sin carta asignada)";
         if (ticket.getEstimatedCard() != null) {
             estimatedValue = String.valueOf(ticket.getEstimatedCard().getValue());
         }
 
+        String repo = ticket.getExternalRepo();
+        String issueId = ticket.getExternalId();
+        int rounds = ticket.getCurrentRound() != null ? ticket.getCurrentRound() : 1;
+
         String comment = (request.getCustomComment() != null && !request.getCustomComment().isBlank())
                 ? request.getCustomComment()
                 : "### 🃏 Estimación de Poker de Planificación (OpenPoker)\n\n"
                   + "- **Estimado final:** `" + estimatedValue + "`\n"
-                  + "- **Rondas de votación:** " + ticket.getCurrentRound() + "\n\n"
+                  + "- **Rondas de votación:** " + rounds + "\n\n"
                   + "_Comentario generado automáticamente desde OpenPoker._";
 
+        // 4. Llamada HTTP síncrona ejecutada fuera de cualquier transacción
         gitHubService.postEstimationComment(
-                ticket.getExternalRepo(),
-                ticket.getExternalId(),
+                repo,
+                issueId,
                 comment,
                 request.getPersonalAccessToken()
         );

@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
 interface ExportGitHubModalProps {
@@ -70,21 +71,21 @@ export default function ExportGitHubModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-md p-4 space-y-4">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[480px] p-6">
+        <DialogHeader className="text-left space-y-1">
           <DialogTitle className="text-lg font-bold text-foreground">
             Exportar a GitHub
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground truncate">
+          <DialogDescription className="text-xs text-muted-foreground line-clamp-2">
             Ticket: {ticketTitle}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div>
+        <div className="flex flex-col gap-4 py-2 w-full">
+          <div className="flex flex-col gap-1.5 w-full">
             <label 
               htmlFor="github-export-token" 
-              className="text-xs font-semibold text-muted-foreground block mb-1"
+              className="text-xs font-semibold text-muted-foreground"
             >
               Personal Access Token (con permisos de issues) *
             </label>
@@ -94,14 +95,14 @@ export default function ExportGitHubModal({
               placeholder="ghp_..."
               value={token}
               onChange={(e) => setToken(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full box-border px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
             />
           </div>
 
-          <div>
+          <div className="flex flex-col gap-1.5 w-full">
             <label 
               htmlFor="github-export-comment" 
-              className="text-xs font-semibold text-muted-foreground block mb-1"
+              className="text-xs font-semibold text-muted-foreground"
             >
               Comentario personalizado (opcional)
             </label>
@@ -111,19 +112,19 @@ export default function ExportGitHubModal({
               placeholder="Deja vacío para usar el formato por defecto de OpenPoker"
               value={customComment}
               onChange={(e) => setCustomComment(e.target.value)}
-              className="w-full px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full box-border px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none transition-all"
             />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-          <Button variant="outline" size="sm" onClick={handleClose}>
+        <DialogFooter className="border-t border-border pt-4 flex flex-row items-center justify-end gap-2 w-full">
+          <Button variant="outline" size="sm" onClick={handleClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button size="sm" onClick={handleExport} disabled={loading}>
+          <Button size="sm" onClick={handleExport} disabled={loading || !token.trim()}>
             {loading ? "Publicando..." : "Publicar Comentario"}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

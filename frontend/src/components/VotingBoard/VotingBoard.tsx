@@ -285,7 +285,7 @@ export default function VotingBoard() {
     loadTickets();
   }, [loadTickets]);
 
-  // ✅ CORREGIDO: Evita subir a Ronda 2 si el ticket apenas se está activando desde WAITING
+  // Transición de estados y envío de carta estimada
   const handleChangeTicketStatus = async (
     e: MouseEvent,
     ticketId: string,
@@ -295,7 +295,7 @@ export default function VotingBoard() {
     try {
       const targetTicket = tickets.find((t) => t.id === ticketId);
 
-      // Solo reiniciar votos si el ticket ya estaba en votación o revelado
+      // Solo llamar a resetVotes si se reinicia una ronda que ya estaba en curso o revelada
       if (newStatus === "VOTING" && targetTicket && targetTicket.status !== "WAITING") {
         await resetVotes(ticketId);
         setSelectedCard(null);
@@ -305,7 +305,19 @@ export default function VotingBoard() {
         return;
       }
 
-      const updated = await ticketService.updateStatus(ticketId, newStatus);
+      // Obtener el ID de la carta estimada cuando se finaliza la votación
+      let cardIdToSend: string | undefined = undefined;
+      if (newStatus === "FINISHED" && activeTicket?.id === ticketId) {
+        const suggestedVal = sessionVotesData?.suggestedCardValue;
+        if (suggestedVal !== undefined && suggestedVal !== null) {
+          const matchedCard = deckCards.find(
+            (c) => String(c.value) === String(suggestedVal)
+          );
+          cardIdToSend = matchedCard?.id;
+        }
+      }
+
+      const updated = await ticketService.updateStatus(ticketId, newStatus, cardIdToSend);
 
       if (activeTicket?.id === ticketId) {
         setActiveTicket(updated);
@@ -584,6 +596,8 @@ export default function VotingBoard() {
           <ul className="divide-y divide-border">
             {tickets.map((t, index) => {
               const isCurrent = activeTicket?.id === t.id;
+              // ✅ Solo se considera ticket de GitHub si externalSource es estrictamente "GITHUB"
+              const isGithubTicket = t.externalSource?.trim().toUpperCase() === "GITHUB";
 
               return (
                 <li key={`${t.id}-${index}`} className="py-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -652,8 +666,8 @@ export default function VotingBoard() {
                         </Button>
                       )}
 
-                      {/* ✅ Botón de exportación en la lista para tickets finalizados de GitHub */}
-                      {t.status === "FINISHED" && (String(t.externalSource).toUpperCase() === "GITHUB" || t.title.startsWith("#")) && (
+                      {/* Botón de exportación en la fila solo para tickets de GitHub autenticados */}
+                      {t.status === "FINISHED" && isGithubTicket && (
                         <Button
                           size="sm"
                           variant="secondary"
@@ -700,8 +714,8 @@ export default function VotingBoard() {
             />
           )}
 
-          {/* ✅ BOTÓN EN LA MESA CENTRAL: Si el ticket activo está FINISHED y viene de GitHub */}
-          {isHost && activeTicket.status === "FINISHED" && (String(activeTicket.externalSource).toUpperCase() === "GITHUB" || activeTicket.title.startsWith("#")) && (
+          {/* ✅ Botón directo en la mesa principal validado únicamente con externalSource */}
+          {isHost && activeTicket.status === "FINISHED" && activeTicket.externalSource?.trim().toUpperCase() === "GITHUB" && (
             <div className="my-4 flex justify-center">
               <Button
                 size="default"

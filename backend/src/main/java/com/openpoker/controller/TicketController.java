@@ -95,7 +95,7 @@ public class TicketController {
             @RequestParam(required = false) UUID estimatedCardId) {
 
         // 🔒 Delegamos la actualización y validación de HOST al servicio
-        TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus);
+        TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus, estimatedCardId);
 
         // 🚀 Notificar en vivo el cambio de estado (ej: al pasar a VOTING)
         ticketRepository.findById(ticketId).ifPresent(ticket -> {
