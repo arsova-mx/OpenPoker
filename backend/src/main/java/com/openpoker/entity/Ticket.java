@@ -50,12 +50,14 @@ public class Ticket {
     @Column(nullable = false)
     private TicketStatus status;
 
+    @Builder.Default
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
     @Column(name = "position")
     private Integer position;
 
+    @Builder.Default
     @Column(name = "current_round", nullable = false)
     private Integer currentRound = 1;
 
@@ -82,7 +84,25 @@ public class Ticket {
         if (this.status == null) {
             this.status = TicketStatus.WAITING; // <-- Inicia siempre en WAITING
         }
+        if (this.createdAt == null) {
+            this.createdAt = Instant.now(); // 👈 Agrega esta línea
+        }
+        if (this.currentRound == null) {
+            this.currentRound = 1; // 👈 Agrega esta línea
+        }
     }
+
+    @Column(name = "external_source", length = 50)
+    private String externalSource; // ej: "GITHUB"
+
+    @Column(name = "external_id", length = 100)
+    private String externalId; // Número o ID del issue (ej: "123")
+
+    @Column(name = "external_url", length = 500)
+    private String externalUrl; // Enlace directo al issue en GitHub
+
+    @Column(name = "external_repo", length = 255)
+    private String externalRepo; // ej: "octocat/Hello-World"
 
 
 

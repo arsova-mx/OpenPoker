@@ -10,8 +10,11 @@ import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -64,5 +67,14 @@ public class SessionAccessService {
         return userRepository.findByUsername(username)
                 .flatMap(user -> participantRepository.findByGameSessionAndUser(session, user))
                 .isPresent();
+    }
+
+    public void requireHost(UUID sessionId, String username) {
+        GameSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sesión no encontrada"));
+
+        if (!session.getHost().getUsername().equalsIgnoreCase(username)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Acceso denegado: solo el Host puede realizar esta acción");
+        }
     }
 }

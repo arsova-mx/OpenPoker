@@ -72,7 +72,8 @@ public class TicketController {
                     t.getDescription(),
                     t.getGameSession().getId(),
                     t.getStatus(),
-                    t.getCurrentRound()
+                    t.getCurrentRound(),
+                    t.getExternalSource()
                 ))
                 .toList();
 
@@ -90,10 +91,11 @@ public class TicketController {
     public ResponseEntity<TicketResponseDTO> updateTicketStatus(
             @AuthenticationPrincipal String username,
             @PathVariable UUID ticketId, 
-            @RequestParam TicketStatus newStatus) {
+            @RequestParam TicketStatus newStatus,
+            @RequestParam(required = false) UUID estimatedCardId) {
 
         // 🔒 Delegamos la actualización y validación de HOST al servicio
-        TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus);
+        TicketResponseDTO response = ticketService.updateStatus(username, ticketId, newStatus, estimatedCardId);
 
         // 🚀 Notificar en vivo el cambio de estado (ej: al pasar a VOTING)
         ticketRepository.findById(ticketId).ifPresent(ticket -> {
