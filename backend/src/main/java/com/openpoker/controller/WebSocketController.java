@@ -338,7 +338,7 @@ public class WebSocketController {
         // Enviar al tópico público solo si NO es una excepción de seguridad/privacidad estricta
         if (inviteCode != null && !inviteCode.isBlank() && 
             !(ex instanceof OnlyHostCanRevealVotesException || ex instanceof InsufficientRoleException)) {
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", errorPayload);
+            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) errorPayload);
         }
 
         // Siempre enviar el error al canal privado del usuario afectado

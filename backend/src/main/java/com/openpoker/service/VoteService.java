@@ -324,6 +324,6 @@ public class VoteService {
         payload.put("ticketId", ticket.getId());
         payload.put("newRound", ticket.getCurrentRound());
 
-        messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/votes", payload);
+        messagingTemplate.convertAndSend("/topic/session/" + session.getSessionCode() + "/votes", (Object) payload);
     }
 }
