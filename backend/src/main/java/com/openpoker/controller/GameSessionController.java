@@ -57,18 +57,11 @@ public class GameSessionController {
      */
     @PostMapping("/{code}/guests")
     public ResponseEntity<GuestJoinResponse> joinAsGuest(@PathVariable String code, @RequestBody @Valid GuestJoinRequest request) {
-        SessionResponse sessionResp = gameSessionService.joinSession(new JoinSessionRequest(code, null, request.guestName()));
-        
-        // Buscamos al participante recién creado o reutilizado
-        Participant guest = gameSessionService.getParticipants(code).stream()
-                .filter(p -> request.guestName().equals(p.getGuestDisplayName()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalStateException("No se pudo registrar al invitado"));
-
-        String guestToken = jwtService.generateGuestToken(guest.getId(), code);
+        Participant guest = gameSessionService.joinAsGuest(code, request.guestName());
+        String guestToken = jwtService.generateGuestToken(guest.getId(), guest.getGameSession().getSessionCode());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(new GuestJoinResponse(
-                sessionResp,
+                gameSessionService.getSessionResponse(guest.getGameSession()),
                 guest.getId(),
                 guest.getGuestDisplayName(),
                 guestToken));
