@@ -78,3 +78,13 @@ pnpm-debug.log*
 *.pid
 *.seed
 *.pid.lock
+
+# ── AI tooling (local state) ─────────────
+# Shared, versioned config lives in CLAUDE.md, .claude/settings.json, .claude/hooks and .claude/skills
+.claude/settings.local.json
+.claude/worktrees/
+.playwright-mcp/
+.codebase-memory/
+
+# Eclipse annotation processing (backend)
+.factorypath

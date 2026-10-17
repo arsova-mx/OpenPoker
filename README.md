@@ -151,11 +151,11 @@ OpenPoker/
 │   ├── pages/  routes/   # Pages and React Router config
 │   ├── store/            # Zustand stores
 │   └── types/            # Shared TypeScript types
-├── docs/                 # API reference, database/migrations and vision
+├── docs/                 # API reference, database/migrations, deployment and vision
 └── docker-compose.yml
 ```
 
-The REST and WebSocket contract is documented in **[docs/api.md](docs/api.md)**, and the database schema and migrations in **[docs/database.md](docs/database.md)**.
+The REST and WebSocket contract is documented in **[docs/api.md](docs/api.md)**, the database schema and migrations in **[docs/database.md](docs/database.md)**, and how to host OpenPoker in **[docs/deployment.md](docs/deployment.md)**.
 
 ## 🤝 Contributing
 
@@ -165,6 +165,7 @@ Contributions are welcome.
 - Issues are labeled by area (`area:backend`, `area:frontend`, `area:infra`) and priority (`priority:P0` to `P2`).
 - Work on a branch and open a pull request that links its issue (`Closes #123`). CI must pass.
 - Prefer [Conventional Commits](https://www.conventionalcommits.org/) for PR titles (`feat:`, `fix:`, `docs:`...).
+- **AI-assisted contributions are welcome.** The project is set up for [Claude Code](https://claude.com/claude-code): [`CLAUDE.md`](CLAUDE.md) (plus `backend/CLAUDE.md` and `frontend/CLAUDE.md`) holds the conventions and invariants, and `.claude/` adds shared permissions, a hook that protects merged Flyway migrations, and the `/verify` and `/db-migration` skills. Other agents can read the same files. You remain responsible for every line you submit: review it and run the checks.
 
 A full `CONTRIBUTING.md` and code of conduct are coming in [#60](https://github.com/arsova-mx/OpenPoker/issues/60).
 
