@@ -47,7 +47,7 @@ public class IntegrationController {
             String sessionCode = savedTickets.get(0).getGameSession().getSessionCode();
             messagingTemplate.convertAndSend(
                     "/topic/session/" + sessionCode + "/tickets-imported",
-                    Map.of("message", "Tickets importados desde GitHub", "count", savedTickets.size())
+                    (Object) Map.of("message", "Tickets importados desde GitHub", "count", savedTickets.size())
             );
         }
 

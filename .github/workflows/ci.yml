@@ -29,6 +29,42 @@ jobs:
       - name: Build and test
         run: ./mvnw -B -ntp clean verify
 
+  backend-postgresql:
+    name: Backend tests on PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: openpoker_tests
+          POSTGRES_USER: openpoker
+          POSTGRES_PASSWORD: openpoker
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openpoker -d openpoker_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Test against PostgreSQL 17
+        run: >-
+          ./mvnw -B -ntp clean verify
+          -Dspring.datasource.url=jdbc:postgresql://localhost:5432/openpoker_tests
+          -Dspring.datasource.username=openpoker
+          -Dspring.datasource.password=openpoker
+          -Dspring.datasource.driver-class-name=org.postgresql.Driver
+          -Dspring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
   frontend:
     name: Frontend (lint, type-check and build)
     runs-on: ubuntu-latest
@@ -50,7 +86,7 @@ jobs:
   compose-smoke:
     name: Docker Compose smoke test
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend, backend-postgresql, frontend]
     env:
       POSTGRES_PASSWORD: ci-password
     steps:
