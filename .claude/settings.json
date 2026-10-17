@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw *)",
+      "Bash(npm ci)",
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "Bash(npm run format)",
+      "Bash(./scripts/smoke-test.sh *)",
+      "Bash(docker compose ps *)",
+      "Bash(docker compose logs *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-migrations.sh",
+            "timeout": 10,
+            "statusMessage": "Checking Flyway migrations"
+          }
+        ]
+      }
+    ]
+  }
+}
