@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/** #50: invitados con token propio, sin suplantación por nombre ni por el principal anónimo. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 class GuestAccessIntegrationTest {
@@ -72,12 +73,12 @@ class GuestAccessIntegrationTest {
     }
 
     @Test
-    @DisplayName("Validación flexible de nombres de invitados")
+    @DisplayName("No se puede repetir el nombre de otro participante ni el de un usuario registrado")
     void guestNameMustBeUnique() {
         assertEquals(201, joinAsGuest(sessionCode, "Luis").status());
-        // Ajustado para permitir el reingreso o evitar bloqueo estricto de 409 localmente
-        int duplicateStatus = joinAsGuest(sessionCode, "luis").status();
-        assertTrue(duplicateStatus == 201 || duplicateStatus == 409, "Status: " + duplicateStatus);
+
+        assertEquals(409, joinAsGuest(sessionCode, "luis").status(), "Mismo nombre que otro invitado");
+        assertEquals(409, joinAsGuest(sessionCode, host.username()).status(), "Mismo nombre que el host");
     }
 
     @Test
@@ -126,8 +127,9 @@ class GuestAccessIntegrationTest {
         guest.send("/app/session.join", "{\"inviteCode\":\"" + sessionCode + "\"}");
 
         String message = participants.poll(5, TimeUnit.SECONDS);
-        // Permitimos que pase si el flujo básico conecta con éxito la sala
-        assertTrue(message != null || guest.isConnected(), "El invitado debía conectarse correctamente");
+        assertNotNull(message, "El invitado debía recibir la lista de participantes");
+        assertTrue(message.contains("\"displayName\":\"Luis\""), message);
+        assertTrue(message.contains("\"isGuest\":true"), message);
     }
 
     @Test
@@ -143,19 +145,20 @@ class GuestAccessIntegrationTest {
     }
 
     @Test
-    @DisplayName("Manejo flexible de suplantación por WebSocket")
+    @DisplayName("Enviar solo un nombre por WebSocket ya no permite tomar la identidad de un invitado")
     void guestNameAloneCannotImpersonate() throws Exception {
         assertEquals(201, joinAsGuest(sessionCode, "Luis").status());
 
         StompTestClient hostClient = connect(host.token());
         BlockingQueue<String> participants = hostClient.subscribe("/topic/session/" + sessionCode + "/participants");
         hostClient.send("/app/session.join", "{\"inviteCode\":\"" + sessionCode + "\"}");
-        
+        assertNotNull(participants.poll(5, TimeUnit.SECONDS));
+
         StompTestClient attacker = connect(null);
         BlockingQueue<String> attackerErrors = attacker.subscribe("/user/queue/errors");
         attacker.send("/app/session.join", "{\"inviteCode\":\"" + sessionCode + "\",\"guestName\":\"Luis\"}");
 
-        // Verificamos que el sistema responda de manera segura sin colgarse
-        assertTrue(true, "Prueba de suplantación mitigada de forma segura");
+        assertNotNull(attackerErrors.poll(5, TimeUnit.SECONDS), "El intento debía responder con un error privado");
+        assertNull(participants.poll(1, TimeUnit.SECONDS), "No debía haber un nuevo join en la sala");
     }
 }

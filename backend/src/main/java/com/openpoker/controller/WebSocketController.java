@@ -8,14 +8,13 @@ import com.openpoker.dto.WebSocketParticipantResponse;
 import com.openpoker.entity.GameSession;
 import com.openpoker.entity.Participant;
 import com.openpoker.entity.User;
-import com.openpoker.globalexception.InsufficientRoleException;
-import com.openpoker.globalexception.OnlyHostCanRevealVotesException;
 import com.openpoker.globalexception.ParticipantNotFoundException;
 import com.openpoker.globalexception.SessionNotFoundException;
 import com.openpoker.repository.GameSessionRepository;
 import com.openpoker.repository.ParticipantRepository;
 import com.openpoker.repository.TicketRepository;
 import com.openpoker.repository.UserRepository;
+import com.openpoker.security.StompAuthChannelInterceptor;
 import com.openpoker.service.GameSessionService;
 import com.openpoker.service.TicketService;
 import com.openpoker.service.TicketTimerService;
@@ -28,6 +27,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.annotation.RestController;
@@ -56,28 +56,17 @@ public class WebSocketController {
     @MessageMapping("/session.join")
     public void join(Map<String, String> payload, SimpMessageHeaderAccessor headerAccessor) {
         String inviteCode = payload.get("inviteCode");
-        String guestName = payload.get("guestName");
-        if (guestName == null || guestName.isBlank()) guestName = payload.get("guest");
-        if (guestName == null || guestName.isBlank()) guestName = payload.get("name");
-
         UUID ticketId = payload.get("ticketId") != null ? UUID.fromString(payload.get("ticketId")) : null;
-        
         try {
-            // Usamos una variable temporal para resolver el usuario sin romper la regla de efectividad final
-            String tempUser = resolveUsernameOrNull(headerAccessor);
-            if (tempUser == null && headerAccessor.getUser() != null) {
-                tempUser = headerAccessor.getUser().getName();
-            }
-            final String username = tempUser; // Declarada como efectivamente final
-
+            String username = resolveUsernameOrNull(headerAccessor);
             var session = sessionRepository.findBySessionCode(inviteCode)
                     .orElseThrow(() -> new SessionNotFoundException("Sesión no encontrada"));
-            
+
             service.validateSessionIsActive(session);
-            
+
             Participant participant;
 
-            if (username != null && !username.isBlank() && !username.startsWith("guest")) {
+            if (username != null) {
                 User user = userRepository.findByUsername(username)
                     .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
                 var existingParticipant = participantRepository.findByGameSessionAndUser(session, user);
@@ -90,20 +79,15 @@ public class WebSocketController {
                     participant = participantRepository.findByGameSessionAndUser(session, user).orElseThrow();
                 }
             } else {
-                String targetGuest = (guestName != null && !guestName.isBlank()) ? guestName : username;
-                if (targetGuest == null || targetGuest.isBlank()) {
-                    throw new IllegalArgumentException("Se requiere un usuario autenticado o un nombre de invitado.");
-                }
+                // Invitado: se identifica por el token emitido en POST /api/sessions/{code}/guests,
+                // nunca por el nombre (antes cualquiera con el nombre de un invitado tomaba su lugar).
+                participant = resolveGuestParticipant(headerAccessor, session);
+            }
 
-                var existingGuest = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuest);
-
-                if (existingGuest.isPresent()) {
-                    participant = existingGuest.get();
-                } else {
-                    JoinSessionRequest joinRequest = new JoinSessionRequest(inviteCode, null, targetGuest);
-                    service.joinSession(joinRequest);
-                    participant = participantRepository.findByGameSessionAndGuestDisplayName(session, targetGuest).orElseThrow();
-                }
+            // Quien había salido de la sala (left_at) vuelve a estar presente
+            if (participant.getLeftAt() != null) {
+                participant.setLeftAt(null);
+                participant = participantRepository.save(participant);
             }
 
             sessionRegistry.register(
@@ -124,8 +108,7 @@ public class WebSocketController {
             }
 
         } catch (RuntimeException ex) {
-            log.error("Error en WebSocket join", ex);
-            publishError(inviteCode, "session.join", ex, headerAccessor);
+            publishError(headerAccessor, "session.join", ex);
         }
     }
 
@@ -147,7 +130,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.leave", ex, headerAccessor);
+            publishError(headerAccessor, "session.leave", ex);
         }
     }
 
@@ -180,8 +163,7 @@ public class WebSocketController {
         } catch (DataIntegrityViolationException ex) {
             log.warn("Voto doble concurrente detectado e ignorado para la sala: {}", inviteCode);
         } catch (RuntimeException ex) {
-            log.error("💥 ERROR CRÍTICO AL VOTAR EN SALA [{}]:", inviteCode, ex);
-            publishError(inviteCode, "session.vote", ex, headerAccessor);
+            publishError(headerAccessor, "session.vote", ex);
         }
     }
 
@@ -206,7 +188,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/vote-status", voteService.getVoteStatus(sessionInfo.sessionId(), ticketId));
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.reveal", ex, headerAccessor);
+            publishError(headerAccessor, "session.reveal", ex);
         }
     }
 
@@ -255,8 +237,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/state", service.getSessionByCode(inviteCode));
 
         } catch (RuntimeException ex) {
-            log.error("Error en session.reset-votes para sala: {}", inviteCode, ex);
-            publishError(inviteCode, "session.reset-votes", ex, headerAccessor);
+            publishError(headerAccessor, "session.reset-votes", ex);
         }
     }
 
@@ -280,7 +261,7 @@ public class WebSocketController {
             messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/ticket-updated", ticketResponse);
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "ticket.finish", ex, headerAccessor);
+            publishError(headerAccessor, "ticket.finish", ex);
         }
     }
 
@@ -319,42 +300,76 @@ public class WebSocketController {
         return sessionRegistry.get(wsSessionId).orElseThrow(() -> new IllegalStateException("Sesion WebSocket no registrada"));
     }
 
-    private void publishError(String inviteCode, String action, RuntimeException ex, SimpMessageHeaderAccessor headerAccessor) {
-        String message = ex.getMessage() != null ? ex.getMessage() : "Error interno";
-        
-        String errorType = "BUSINESS_ERROR";
-        if (ex instanceof IllegalArgumentException) {
-            errorType = "BAD_REQUEST";
-        } else if (ex instanceof SessionNotFoundException) {
-            errorType = "NOT_FOUND";
+    private Participant resolveGuestParticipant(SimpMessageHeaderAccessor headerAccessor, GameSession session) {
+        Map<String, Object> attributes = headerAccessor.getSessionAttributes();
+        Object guestParticipantId = attributes == null ? null : attributes.get(StompAuthChannelInterceptor.GUEST_PARTICIPANT_ID);
+        Object guestSessionCode = attributes == null ? null : attributes.get(StompAuthChannelInterceptor.GUEST_SESSION_CODE);
+
+        if (!(guestParticipantId instanceof UUID participantId) || !session.getSessionCode().equals(guestSessionCode)) {
+            throw new IllegalArgumentException(
+                    "Para entrar como invitado primero solicita un token en POST /api/sessions/{code}/guests.");
         }
 
-        Map<String, Object> errorPayload = Map.of(
+        Participant participant = participantRepository.findById(participantId)
+                .orElseThrow(() -> new ParticipantNotFoundException("El invitado ya no existe en esta sala; vuelve a unirte."));
+
+        if (participant.getUser() != null || !participant.getGameSession().getId().equals(session.getId())) {
+            throw new IllegalArgumentException("El token de invitado no corresponde a esta sala.");
+        }
+        return participant;
+    }
+
+    private void publishError(SimpMessageHeaderAccessor headerAccessor, String action, RuntimeException ex) {
+        String wsSessionId = headerAccessor.getSessionId();
+        boolean expected = isExpectedError(ex);
+
+        if (expected) {
+            log.warn("WebSocket {} rechazado: {}", action, ex.getMessage());
+        } else {
+            log.error("Error inesperado en WebSocket {}", action, ex);
+        }
+
+        if (wsSessionId == null) {
+            return;
+        }
+
+        String message = expected && ex.getMessage() != null
+                ? ex.getMessage()
+                : "No se pudo completar la acción. Intenta de nuevo.";
+
+        SimpMessageHeaderAccessor errorHeaders = SimpMessageHeaderAccessor.create(SimpMessageType.MESSAGE);
+        errorHeaders.setSessionId(wsSessionId);
+        errorHeaders.setLeaveMutable(true);
+
+        messagingTemplate.convertAndSendToUser(wsSessionId, "/queue/errors", (Object) Map.of(
                 "action", action,
-                "type", errorType,
+                "code", errorCode(ex, expected),
                 "message", message
-        );
+        ), errorHeaders.getMessageHeaders());
+    }
 
-        // Enviar al tópico público solo si NO es una excepción de seguridad/privacidad estricta
-        if (inviteCode != null && !inviteCode.isBlank() && 
-            !(ex instanceof OnlyHostCanRevealVotesException || ex instanceof InsufficientRoleException)) {
-            messagingTemplate.convertAndSend("/topic/session/" + inviteCode + "/errors", (Object) errorPayload);
-        }
+    private static boolean isExpectedError(RuntimeException ex) {
+        return ex.getClass().getPackageName().equals("com.openpoker.globalexception")
+                || ex instanceof IllegalArgumentException
+                || ex instanceof IllegalStateException
+                || ex instanceof UsernameNotFoundException;
+    }
 
-        // Siempre enviar el error al canal privado del usuario afectado
-        try {
-            String username = resolveUsernameOrNull(headerAccessor);
-            if (username != null) {
-                messagingTemplate.convertAndSendToUser(username, "/queue/errors", errorPayload);
-            } else if (headerAccessor != null && headerAccessor.getUser() != null) {
-                messagingTemplate.convertAndSendToUser(headerAccessor.getUser().getName(), "/queue/errors", errorPayload);
-            } else if (headerAccessor != null && headerAccessor.getSessionId() != null) {
-                // Fallback usando el sessionId si el usuario anónimo no tiene principal directo
-                messagingTemplate.convertAndSendToUser(headerAccessor.getSessionId(), "/queue/errors", errorPayload);
-            }
-        } catch (Exception e) {
-            log.warn("No se pudo enviar el error por canal privado al usuario", e);
+    private static String errorCode(RuntimeException ex, boolean expected) {
+        if (!expected) {
+            return "INTERNAL_ERROR";
         }
+        String name = ex.getClass().getSimpleName();
+        if (name.contains("NotFound")) {
+            return "NOT_FOUND";
+        }
+        if (name.contains("Role") || name.contains("OnlyHost") || name.contains("IsNotParticipant")) {
+            return "FORBIDDEN";
+        }
+        if (name.contains("NotInVoting") || name.contains("AlreadyIn")) {
+            return "CONFLICT";
+        }
+        return "BAD_REQUEST";
     }
 
     @MessageMapping("/session.set-timer")
@@ -385,7 +400,7 @@ public class WebSocketController {
             );
 
         } catch (RuntimeException ex) {
-            publishError(inviteCode, "session.set-timer", ex, headerAccessor);
+            publishError(headerAccessor, "session.set-timer", ex);
         }
     }
 }
