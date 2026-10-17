@@ -14,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -40,7 +39,6 @@ class VoteRoundsIntegrationTest {
     private TicketRepository ticketRepository;
 
     @Test
-    @Transactional
     @DisplayName("Tras reiniciar la votación se vuelve a votar en la ronda 2 y se conservan los votos de la ronda 1")
     void votesAreKeptPerRound() throws Exception {
         seeding.seedDecks();

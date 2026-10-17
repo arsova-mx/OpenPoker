@@ -9,7 +9,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.jdbc.JdbcTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,8 +32,15 @@ class DataSeederTest {
 
     private DataSeeder seeder;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
     @BeforeEach
     void setUp() {
+        // La BD de pruebas se comparte entre clases: antes de borrar las barajas se borran las salas, tickets y
+        // votos de otros tests que las referencian, en orden de llaves foráneas. Así el resultado no depende
+        // del orden en que corran las clases.
+        JdbcTestUtils.deleteFromTables(jdbc, "comments", "votes", "ticket", "participants", "game_sessions");
         deckRepository.deleteAll();
         seeder = new DataSeeder(deckRepository);
     }
