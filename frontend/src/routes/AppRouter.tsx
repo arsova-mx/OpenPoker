@@ -6,7 +6,7 @@ import LandingPage from "../pages/landingPage";
 import { getAuthToken, loader as tokenLoader } from "../hooks/useTokenDuration";
 import { Home } from "../pages/Home";
 import SessionLobby from "../components/SessionLobby/SessionLobby";
-import ProtectedRoute from "./ProtectedRoute"; // <-- Importar el wrapper
+import ProtectedRoute from "./ProtectedRoute";
 import VotingBoard from "../components/VotingBoard/VotingBoard";
 import NotFound from "../pages/NotFound";
 
@@ -31,10 +31,11 @@ export const router = createBrowserRouter([
         loader: redirectAuthenticated,
         element: <LandingPage />,
       },
-      // 🛡️ Todas las rutas privadas agrupadas bajo el wrapper ProtectedRoute
+      // Rutas privadas protegidas
       {
         element: <ProtectedRoute />,
         children: [
+          // Subrutas principales envueltas en Home (Header + Outlet)
           {
             path: "home",
             element: <Home />,
@@ -43,15 +44,31 @@ export const router = createBrowserRouter([
                 index: true,
                 element: <SessionLobby />,
               },
+              {
+                path: "sessions",
+                element: (
+                  <div className="flex h-[60vh] items-center justify-center text-sm text-muted-foreground">
+                    Próximamente: Histórico de sesiones (#40)
+                  </div>
+                ),
+              },
             ],
           },
+          // /session/:code envuelto en Home para heredar el Header
           {
-            path: "session/:code",
-            element: <VotingBoard />,
+            path: "session",
+            element: <Home />,
+            children: [
+              {
+                path: ":code",
+                element: <VotingBoard />,
+              },
+            ],
           },
         ],
       },
       ...authRoutes,
+      // Manejo de rutas desconocidas hacia NotFound
       {
         path: "*",
         element: <NotFound />,
